@@ -11,7 +11,6 @@ export class ChatService {
   private messages: ChatMessage[] = [];
   private listeners: Set<MessageListener> = new Set();
   private pendingResponse: { text: string; runId: string } | null = null;
-  private pendingHistoryRequests: Set<string> = new Set(); // 记录等待 history 的 runId
 
   constructor(
     private gateway: GatewayService,
@@ -159,9 +158,9 @@ export class ChatService {
   /**
    * 处理 chat 事件（delta + final）
    *
-   * 协议：
-   * 1. delta 事件：流式文本片段，累积到 buffer
-   * 2. final 事件：完成标记，message 可能为 undefined
+   * 协议（与 Web 端保持一致）：
+   * 1. delta 事件：流式文本，直接替换 stream（不累积）
+   * 2. final 事件：清除 stream，总是调用 history
    */
   private handleChatEvent(gatewayMessage: GatewayMessage): void {
     const payload = gatewayMessage.payload as {
@@ -180,9 +179,7 @@ export class ChatService {
       state: payload.state,
       runId: payload.runId,
       sessionKey: payload.sessionKey,
-      currentSessionId: this.sessionId,
-      hasMessage: !!payload.message,
-      messageContentLength: payload.message?.content?.[0]?.text?.length || 0
+      currentSessionId: this.sessionId
     });
 
     // 检查是否属于当前会话
@@ -194,17 +191,11 @@ export class ChatService {
     // 处理 delta 事件（流式文本）
     if (payload.state === 'delta') {
       const deltaText = payload.message?.content?.[0]?.text || '';
-      if (deltaText) {
-        // 累积到 buffer
-        if (!this.pendingResponse || this.pendingResponse.runId !== payload.runId) {
-          this.pendingResponse = { text: deltaText, runId: payload.runId || '' };
-          console.log('[ChatService] 初始化 buffer, 长度:', deltaText.length);
-        } else {
-          this.pendingResponse.text += deltaText;
-          console.log('[ChatService] 追加 delta, 当前长度:', this.pendingResponse.text.length);
-        }
 
-        // 实时更新 UI（显示累积的文本）
+      // 直接替换（不累积！）
+      if (deltaText) {
+        this.pendingResponse = { text: deltaText, runId: payload.runId || '' };
+        console.log('[ChatService] 更新 stream, 长度:', deltaText.length);
         this.updatePendingMessage();
       }
       return;
@@ -212,58 +203,14 @@ export class ChatService {
 
     // 处理 final 事件（完成）
     if (payload.state === 'final') {
-      console.log('[ChatService] 收到 final 状态');
+      console.log('[ChatService] 收到 final 状态，清除 stream，请求 history');
 
-      let content = '';
-
-      // 优先级 1：使用 payload.message 中的内容
-      if (payload.message?.content) {
-        const textParts = payload.message.content
-          .filter(c => c.type === 'text' && c.text)
-          .map(c => c.text || '');
-
-        content = textParts.join('\n\n').trim();
-        console.log('[ChatService] 从 message 提取文本, 长度:', content.length);
-      }
-
-      // 优先级 2：使用累积的 buffer（从 delta 收集）
-      if (!content && this.pendingResponse?.text) {
-        content = this.pendingResponse.text.trim();
-        console.log('[ChatService] 使用 buffer 文本, 长度:', content.length);
-      }
-
-      // 优先级 3：通过 chat.history 获取完整内容
-      if (!content) {
-        console.log('[ChatService] message 和 buffer 都为空，请求 chat.history');
-        // 记录这个 runId，等待 history 响应
-        if (payload.runId) {
-          this.pendingHistoryRequests.add(payload.runId);
-        }
-        // 移除 pending 消息（如果存在）
-        this.removePendingMessage();
-        // 发送 history 请求
-        this.fetchHistory();
-        this.pendingResponse = null;
-        return;
-      }
-
-      const message: ChatMessage = {
-        id: this.generateId(),
-        sessionId: this.sessionId,
-        role: 'assistant',
-        content,
-        timestamp: payload.message?.timestamp || Date.now(),
-        status: 'sent'
-      };
-
-      console.log('[ChatService] 添加 AI 回复消息:', {
-        id: message.id,
-        contentLength: content.length,
-        preview: content.substring(0, 50)
-      });
-
-      this.addMessage(message);
+      // 清除 stream 状态
+      this.removePendingMessage();
       this.pendingResponse = null;
+
+      // 总是调用 history（与 Web 端保持一致）
+      this.fetchHistory();
       return;
     }
 
@@ -275,7 +222,7 @@ export class ChatService {
         id: this.generateId(),
         sessionId: this.sessionId,
         role: 'assistant',
-        content: payload.message?.content?.[0]?.text || '(发生错误)',
+        content: '(发生错误)',
         timestamp: Date.now(),
         status: 'error',
         error: 'AI 处理出错'
@@ -418,55 +365,42 @@ export class ChatService {
 
   /**
    * 处理 chat.history 响应
+   *
+   * 与 Web 端保持一致：完全替换消息列表
    */
   private handleHistoryResponse(
     historyMessages: Array<{
       role: string;
       content: Array<{ type: string; text: string }>;
       timestamp: number;
+      stopReason?: string;
+      usage?: { input: number; output: number; totalTokens: number };
     }>
   ): void {
-    // 查找最新的 assistant 消息
-    const assistantMessages = historyMessages.filter(m => m.role === 'assistant');
+    console.log('[ChatService] 收到 chat.history 响应, 消息数:', historyMessages.length);
 
-    if (assistantMessages.length === 0) {
-      console.log('[ChatService] history 中没有 assistant 消息');
-      return;
-    }
+    // 将 history 消息转换为 ChatMessage 格式
+    const convertedMessages: ChatMessage[] = historyMessages.map(msg => {
+      const content = msg.content
+        .filter(c => c.type === 'text' && c.text)
+        .map(c => c.text || '')
+        .join('\n\n')
+        .trim();
 
-    const lastAssistantMsg = assistantMessages[assistantMessages.length - 1];
-    const content = lastAssistantMsg.content
-      .filter(c => c.type === 'text' && c.text)
-      .map(c => c.text || '')
-      .join('\n\n')
-      .trim();
-
-    console.log('[ChatService] 从 history 提取最新 assistant 消息, 长度:', content.length);
-
-    // 如果有内容，添加到消息列表
-    if (content) {
-      // 检查是否已经存在（避免重复）
-      const lastMsg = this.messages[this.messages.length - 1];
-      if (lastMsg && lastMsg.role === 'assistant' && lastMsg.content === content) {
-        console.log('[ChatService] 消息已存在，跳过添加');
-        return;
-      }
-
-      const message: ChatMessage = {
+      return {
         id: this.generateId(),
         sessionId: this.sessionId,
-        role: 'assistant',
+        role: msg.role as 'user' | 'assistant' | 'system',
         content,
-        timestamp: lastAssistantMsg.timestamp || Date.now(),
+        timestamp: msg.timestamp || Date.now(),
         status: 'sent'
       };
+    });
 
-      console.log('[ChatService] 从 history 添加 AI 回复消息');
-
-      this.addMessage(message);
-    } else {
-      console.log('[ChatService] history 消息内容为空');
-    }
+    // 完全替换消息列表（与 Web 端保持一致）
+    console.log('[ChatService] 替换消息列表, 新数量:', convertedMessages.length);
+    this.messages = convertedMessages;
+    this.notifyListeners();
   }
 
   /**
@@ -483,7 +417,7 @@ export class ChatService {
       method: 'chat.history',
       params: {
         sessionKey: this.sessionId,
-        limit: 10  // 只获取最近 10 条消息
+        limit: 200  // 与 Web 端保持一致
       }
     } as unknown as GatewayMessage);
   }
