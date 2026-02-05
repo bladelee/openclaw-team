@@ -1,0 +1,24 @@
+/* VideoPlayer Component Styles */
+
+.a2ui-videoplayer {
+  width: 100%;
+  position: relative;
+}
+
+.a2ui-video {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 8px;
+  background-color: #000;
+}
+
+.a2ui-videoplayer-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  background-color: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  color: var(--openclaw-text-secondary);
+}

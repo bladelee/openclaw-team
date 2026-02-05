@@ -1,0 +1,61 @@
+/* A2UI Button Styles */
+
+.a2ui-button {
+  padding: var(--openclaw-btn-padding);
+  border-radius: var(--openclaw-btn-radius);
+  font-size: var(--openclaw-btn-font-size);
+  font-weight: var(--openclaw-btn-font-weight);
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px; /* Touch-friendly size */
+  position: relative;
+  overflow: hidden;
+}
+
+/* Platform-specific styles */
+.a2ui-button.android {
+  background-color: var(--openclaw-primary-android);
+  box-shadow: var(--openclaw-shadow-android);
+}
+
+.a2ui-button.ios {
+  background-color: var(--openclaw-primary-ios);
+  box-shadow: var(--openclaw-shadow-ios);
+}
+
+/* Disabled state */
+.a2ui-button:disabled {
+  opacity: var(--openclaw-btn-disabled-opacity);
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Active state */
+.a2ui-button:active:not(:disabled) {
+  transform: scale(0.98);
+  opacity: 0.9;
+}
+
+/* Loading state */
+.a2ui-button.loading::before {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: #fff;
+  animation: spin 1s linear infinite;
+  margin-right: 8px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

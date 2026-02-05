@@ -1,0 +1,34 @@
+/* Status Component Styles */
+
+.a2ui-status {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background-color: var(--openclaw-surface);
+  border-radius: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  font-size: 14px;
+  color: var(--openclaw-text);
+  animation: statusSlideIn 0.3s ease-out;
+}
+
+.a2ui-status-text {
+  white-space: nowrap;
+}
+
+@keyframes statusSlideIn {
+  from {
+    transform: translateX(-50%) translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+}

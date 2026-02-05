@@ -1,0 +1,103 @@
+/* Mobile-specific styles for A2UI React H5 */
+
+.a2ui-root {
+  padding-top: var(--openclaw-a2ui-inset-top);
+  padding-bottom: var(--openclaw-a2ui-inset-bottom);
+  padding-left: var(--openclaw-a2ui-inset-left);
+  padding-right: var(--openclaw-a2ui-inset-right);
+  min-height: 100vh;
+  background-color: var(--openclaw-background);
+  color: var(--openclaw-text);
+}
+
+/* Optimize touch response */
+.a2ui-button,
+.a2ui-card,
+.a2ui-interactive {
+  touch-action: manipulation;
+}
+
+/* Scrollbar styling (for platforms that support it) */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--openclaw-background);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--openclaw-surface);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--openclaw-primary);
+}
+
+/* Button styles */
+.a2ui-button {
+  padding: var(--openclaw-btn-padding);
+  border-radius: var(--openclaw-btn-radius);
+  font-size: var(--openclaw-btn-font-size);
+  font-weight: var(--openclaw-btn-font-weight);
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.a2ui-button.android {
+  background-color: var(--openclaw-primary-android);
+  box-shadow: var(--openclaw-shadow-android);
+}
+
+.a2ui-button.ios {
+  background-color: var(--openclaw-primary-ios);
+  box-shadow: var(--openclaw-shadow-ios);
+}
+
+.a2ui-button:disabled {
+  opacity: var(--openclaw-btn-disabled-opacity);
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Card styles */
+.a2ui-card {
+  padding: var(--openclaw-card-padding);
+  border-radius: var(--openclaw-card-radius);
+  background-color: var(--openclaw-surface);
+}
+
+/* Empty state */
+.a2ui-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--openclaw-text-secondary);
+  text-align: center;
+  padding: 20px;
+}
+
+/* Loading spinner */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.a2ui-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: #fff;
+  animation: spin 1s linear infinite;
+}

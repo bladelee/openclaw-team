@@ -1,0 +1,55 @@
+/* Spinner Component Styles */
+
+.a2ui-spinner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.a2ui-spinner-svg {
+  width: 100%;
+  height: 100%;
+  animation: rotate 2s linear infinite;
+}
+
+.a2ui-spinner-circle {
+  stroke: currentColor;
+  stroke-linecap: round;
+  animation: dash 1.5s ease-in-out infinite;
+}
+
+.a2ui-spinner-small {
+  width: 16px;
+  height: 16px;
+}
+
+.a2ui-spinner-medium {
+  width: 24px;
+  height: 24px;
+}
+
+.a2ui-spinner-large {
+  width: 32px;
+  height: 32px;
+}
+
+@keyframes rotate {
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes dash {
+  0% {
+    stroke-dasharray: 1, 150;
+    stroke-dashoffset: 0;
+  }
+  50% {
+    stroke-dasharray: 90, 150;
+    stroke-dashoffset: -35;
+  }
+  100% {
+    stroke-dasharray: 90, 150;
+    stroke-dashoffset: -124;
+  }
+}

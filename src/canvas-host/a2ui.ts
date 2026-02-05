@@ -3,6 +3,10 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { detectMime } from "../media/mime.js";
+import {
+  handleA2uiReactHttpRequest,
+  A2UI_REACT_PATH,
+} from "./a2ui-react/server.js";
 
 export const A2UI_PATH = "/__openclaw__/a2ui";
 
@@ -168,6 +172,13 @@ export async function handleA2uiHttpRequest(
   }
 
   const url = new URL(urlRaw, "http://localhost");
+
+  // Handle A2UI React H5 app first
+  if (url.pathname === A2UI_REACT_PATH || url.pathname.startsWith(`${A2UI_REACT_PATH}/`)) {
+    return await handleA2uiReactHttpRequest(req, res);
+  }
+
+  // Handle original A2UI (Lit-based)
   const basePath =
     url.pathname === A2UI_PATH || url.pathname.startsWith(`${A2UI_PATH}/`) ? A2UI_PATH : undefined;
   if (!basePath) {
