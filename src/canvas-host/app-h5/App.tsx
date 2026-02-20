@@ -6,6 +6,7 @@ import React from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { ChatPage } from './pages/chat/ChatPage';
 import { SettingsPage } from './pages/settings/SettingsPage';
+import { CanvasPage } from './pages/canvas/CanvasPage';
 import './styles/variables.css';
 
 /**
@@ -17,6 +18,8 @@ function AppRouter() {
   switch (currentPage) {
     case 'settings':
       return <SettingsPage />;
+    case 'canvas':
+      return <CanvasPage />;
     case 'chat':
     default:
       return <ChatPage />;

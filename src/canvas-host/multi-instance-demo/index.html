@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenClaw Multi-Instance Web Chat UI Demo</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    header {
+      background: rgba(255, 255, 255, 0.95);
+      padding: 24px;
+      border-radius: 12px;
+      margin-bottom: 24px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    }
+
+    h1 {
+      color: #333;
+      font-size: 28px;
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      color: #666;
+      font-size: 14px;
+    }
+
+    .controls {
+      display: flex;
+      gap: 12px;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+
+    .input-group {
+      display: flex;
+      gap: 8px;
+      flex: 1;
+      min-width: 300px;
+    }
+
+    input {
+      flex: 1;
+      padding: 10px 14px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+
+    button {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: #667eea;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #5568d3;
+    }
+
+    .btn-secondary {
+      background: #f0f0f0;
+      color: #333;
+    }
+
+    .btn-secondary:hover {
+      background: #e0e0e0;
+    }
+
+    .btn-danger {
+      background: #ef4444;
+      color: white;
+    }
+
+    .btn-danger:hover {
+      background: #dc2626;
+    }
+
+    .instances {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+      gap: 20px;
+    }
+
+    .instance-card {
+      background: white;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .instance-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    }
+
+    .instance-header {
+      background: #f8f9fa;
+      padding: 16px;
+      border-bottom: 1px solid #e9ecef;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .instance-title {
+      font-weight: 600;
+      color: #333;
+      font-size: 16px;
+    }
+
+    .instance-url {
+      color: #666;
+      font-size: 12px;
+      margin-top: 4px;
+      word-break: break-all;
+    }
+
+    .instance-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn-icon {
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+
+    .iframe-container {
+      width: 100%;
+      height: 500px;
+      background: #f8f9fa;
+      position: relative;
+    }
+
+    iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+
+    .iframe-placeholder {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #999;
+      font-size: 14px;
+      background: #f8f9fa;
+    }
+
+    .status-indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 6px;
+    }
+
+    .status-connected {
+      background: #10b981;
+    }
+
+    .status-disconnected {
+      background: #ef4444;
+    }
+
+    .status-loading {
+      background: #f59e0b;
+      animation: pulse 1s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .empty-state {
+      background: white;
+      border-radius: 12px;
+      padding: 60px;
+      text-align: center;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .empty-state-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+    }
+
+    .empty-state-text {
+      color: #666;
+      font-size: 16px;
+    }
+
+    .quick-add {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+
+    .btn-quick {
+      padding: 6px 12px;
+      font-size: 12px;
+      background: #e0e7ff;
+      color: #4338ca;
+    }
+
+    .btn-quick:hover {
+      background: #c7d2fe;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>OpenClaw 多实例 Web Chat UI</h1>
+      <p class="subtitle">通过 iframe 嵌入多个 OpenClaw 实例，每个实例可配置不同的 Gateway 地址</p>
+
+      <div class="input-group">
+        <input type="text" id="instanceUrl" placeholder="输入 Gateway 地址 (如: http://localhost:18789/__openclaw__/ui)" value="http://localhost:18789/__openclaw__/ui">
+        <input type="text" id="instanceName" placeholder="实例名称 (可选)" value="OpenClaw 本地">
+        <button class="btn-primary" onclick="addInstance()">添加实例</button>
+      </div>
+
+      <div class="quick-add">
+        <button class="btn-quick" onclick="quickAdd('http://localhost:18789/__openclaw__/ui', '本地 Gateway')">本地 Gateway</button>
+        <button class="btn-quick" onclick="quickAdd('http://192.168.1.100:18789/__openclaw__/ui', '远程 Gateway')">远程 Gateway</button>
+        <button class="btn-quick" onclick="quickAdd('http://localhost:18789/__openclaw__/a2ui/react', 'A2UI React')">A2UI React</button>
+      </div>
+
+      <div class="controls" style="margin-top: 16px;">
+        <button class="btn-secondary" onclick="loadFromStorage()">从本地存储加载</button>
+        <button class="btn-secondary" onclick="saveToStorage()">保存到本地存储</button>
+        <button class="btn-danger" onclick="clearAllInstances()">清空所有</button>
+      </div>
+    </header>
+
+    <div id="instances" class="instances">
+      <div class="empty-state">
+        <div class="empty-state-icon">🖼️</div>
+        <div class="empty-state-text">还没有添加任何实例，请在上方添加</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 存储所有实例
+    let instances = [];
+    let instanceCounter = 0;
+
+    // 从本地存储加载
+    function loadFromStorage() {
+      const saved = localStorage.getItem('openclaw_instances');
+      if (saved) {
+        try {
+          instances = JSON.parse(saved);
+          renderInstances();
+        } catch (e) {
+          console.error('加载失败:', e);
+        }
+      } else {
+        alert('没有保存的实例');
+      }
+    }
+
+    // 保存到本地存储
+    function saveToStorage() {
+      localStorage.setItem('openclaw_instances', JSON.stringify(instances));
+      alert('已保存 ' + instances.length + ' 个实例');
+    }
+
+    // 快速添加预设实例
+    function quickAdd(url, name) {
+      document.getElementById('instanceUrl').value = url;
+      document.getElementById('instanceName').value = name;
+      addInstance();
+    }
+
+    // 添加实例
+    function addInstance() {
+      const url = document.getElementById('instanceUrl').value.trim();
+      const name = document.getElementById('instanceName').value.trim() || `实例 ${instances.length + 1}`;
+
+      if (!url) {
+        alert('请输入 Gateway 地址');
+        return;
+      }
+
+      // 检查是否已存在
+      if (instances.some(inst => inst.url === url)) {
+        alert('该地址已存在');
+        return;
+      }
+
+      const instance = {
+        id: ++instanceCounter,
+        name,
+        url,
+        status: 'loading'
+      };
+
+      instances.push(instance);
+      renderInstances();
+
+      // 清空输入框
+      document.getElementById('instanceUrl').value = 'http://localhost:18789/__openclaw__/ui';
+      document.getElementById('instanceName').value = 'OpenClaw 本地';
+    }
+
+    // 删除实例
+    function removeInstance(id) {
+      instances = instances.filter(inst => inst.id !== id);
+      renderInstances();
+    }
+
+    // 刷新实例
+    function refreshInstance(id) {
+      const instance = instances.find(inst => inst.id === id);
+      if (instance) {
+        const iframe = document.getElementById(`iframe-${id}`);
+        if (iframe) {
+          iframe.src = iframe.src;
+        }
+      }
+    }
+
+    // 更新连接状态
+    function updateInstanceStatus(id, status) {
+      const instance = instances.find(inst => inst.id === id);
+      if (instance) {
+        instance.status = status;
+        const statusIndicator = document.getElementById(`status-${id}`);
+        if (statusIndicator) {
+          statusIndicator.className = 'status-indicator status-' + status;
+        }
+      }
+    }
+
+    // 渲染所有实例
+    function renderInstances() {
+      const container = document.getElementById('instances');
+
+      if (instances.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">🖼️</div>
+            <div class="empty-state-text">还没有添加任何实例，请在上方添加</div>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = instances.map(instance => `
+        <div class="instance-card">
+          <div class="instance-header">
+            <div>
+              <div class="instance-title">
+                <span id="status-${instance.id}" class="status-indicator status-${instance.status}"></span>
+                ${escapeHtml(instance.name)}
+              </div>
+              <div class="instance-url">${escapeHtml(instance.url)}</div>
+            </div>
+            <div class="instance-actions">
+              <button class="btn-icon btn-secondary" onclick="refreshInstance(${instance.id})" title="刷新">🔄</button>
+              <button class="btn-icon btn-danger" onclick="removeInstance(${instance.id})" title="删除">✕</button>
+            </div>
+          </div>
+          <div class="iframe-container">
+            <iframe
+              id="iframe-${instance.id}"
+              src="${escapeHtml(instance.url)}"
+              onload="updateInstanceStatus(${instance.id}, 'connected')"
+              onerror="updateInstanceStatus(${instance.id}, 'disconnected')"
+              allow="clipboard-write; clipboard-read"
+              sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals"
+            ></iframe>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // HTML 转义
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // 清空所有实例
+    function clearAllInstances() {
+      if (instances.length === 0) return;
+      if (confirm('确定要清空所有实例吗？')) {
+        instances = [];
+        renderInstances();
+        localStorage.removeItem('openclaw_instances');
+      }
+    }
+
+    // 页面加载时尝试恢复
+    window.addEventListener('load', () => {
+      const saved = localStorage.getItem('openclaw_instances');
+      if (saved) {
+        try {
+          instances = JSON.parse(saved);
+          instanceCounter = instances.reduce((max, inst) => Math.max(max, inst.id), 0);
+          renderInstances();
+        } catch (e) {
+          console.error('加载失败:', e);
+        }
+      }
+    });
+
+    // 监听来自 iframe 的消息
+    window.addEventListener('message', (event) => {
+      // 验证来源（可选）
+      // if (event.origin !== 'http://localhost:18789') return;
+
+      console.log('收到 iframe 消息:', event.data);
+
+      // 可以根据消息类型处理不同的事件
+      if (event.data.type === 'chat') {
+        console.log('Chat 事件:', event.data);
+      } else if (event.data.type === 'status') {
+        console.log('状态更新:', event.data);
+      }
+    });
+  </script>
+</body>
+</html>

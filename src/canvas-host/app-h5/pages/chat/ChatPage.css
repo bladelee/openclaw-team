@@ -56,6 +56,27 @@
   transform: scale(0.98);
 }
 
+.canvas-button {
+  padding: 6px 12px;
+  background: none;
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 8px;
+  color: var(--text-primary, #111827);
+  font-size: 0.9375rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.canvas-button:hover {
+  background-color: var(--bg-tertiary, #f3f4f6);
+  border-color: var(--accent-color, #8b5cf6);
+}
+
+.canvas-button:active {
+  transform: scale(0.98);
+}
+
 .connection-status {
   font-size: 0.875rem;
   padding: 4px 12px;

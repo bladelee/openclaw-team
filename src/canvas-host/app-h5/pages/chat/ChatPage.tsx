@@ -5,6 +5,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useChat } from '../../hooks/useChat';
+import { GatewayService } from '../../services/gateway';
 import './ChatPage.css';
 
 export const ChatPage: React.FC = () => {
@@ -12,6 +13,25 @@ export const ChatPage: React.FC = () => {
   const { messages, sendText, isLoading } = useChat(gateway);
   const [inputText, setInputText] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const a2uiDetectedRef = useRef(false);
+
+  // 监听 A2UI 消息
+  useEffect(() => {
+    if (!gateway) {
+      return;
+    }
+
+    const handleMessage = (message: { type?: string; event?: string; payload?: unknown }) => {
+      // 检查是否是 a2ui 事件
+      if (message.type === 'event' && message.event === 'a2ui') {
+        console.log('[ChatPage] 检测到 A2UI 消息，自动切换到 Canvas 页面');
+        a2uiDetectedRef.current = true;
+        setCurrentPage('canvas');
+      }
+    };
+
+    gateway.on('message', handleMessage);
+  }, [gateway, setCurrentPage]);
 
   // 自动滚动到底部
   useEffect(() => {
@@ -51,6 +71,14 @@ export const ChatPage: React.FC = () => {
       <header className="chat-header">
         <h1>💬 OpenClaw 聊天</h1>
         <div className="header-actions">
+          <button
+            className="canvas-button"
+            onClick={() => setCurrentPage('canvas')}
+            aria-label="Canvas"
+            title="查看 Canvas/A2UI 界面"
+          >
+            🎨 Canvas
+          </button>
           <button
             className="settings-button"
             onClick={() => setCurrentPage('settings')}
