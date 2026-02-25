@@ -1,0 +1,152 @@
+# OpenClaw 多租户管理服务 - Docker Compose 配置
+# 基于 Portainer 的多主机管理方案
+
+version: '3.8'
+
+services:
+  # Portainer - Docker 管理平台
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: openclaw-portainer
+    restart: unless-stopped
+    command: -H unix:///var/run/docker.sock
+    ports:
+      - "9443:9443"   # HTTPS UI
+      - "9000:9000"   # HTTP UI
+      - "8000:8000"   # TCP tunnel for Edge agents
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    networks:
+      - openclaw-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9000/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # PostgreSQL - 数据库
+  postgres:
+    image: postgres:16-alpine
+    container_name: openclaw-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=openclaw
+      - POSTGRES_USER=openclaw
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-openclaw123}
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    networks:
+      - openclaw-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openclaw"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 租户管理服务
+  tenant-manager:
+    build:
+      context: ./tenant-manager
+      dockerfile: Dockerfile
+    container_name: openclaw-tenant-manager
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - LOG_LEVEL=info
+      - DATABASE_URL=postgresql://openclaw:${POSTGRES_PASSWORD:-openclaw123}@postgres:5432/openclaw
+      - PORTAINER_URL=http://portainer:9000
+      - PORTAINER_API_KEY=${PORTAINER_API_KEY}
+      - JWT_SECRET=${JWT_SECRET:-change-this-to-a-random-secret-key-min-32-chars}
+      - DEFAULT_PLAN=basic
+      - DATA_DIR=/data/openclaw/tenants
+      - GATEWAY_IMAGE=ghcr.io/moltbot/moltbot:latest
+      - SANDBOX_IMAGE=ghcr.io/moltbot/moltbot:sandbox
+      - QUOTA_FREE=0.5,512,5120,1
+      - QUOTA_BASIC=1,1024,20480,3
+      - QUOTA_PRO=2,2048,51200,10
+      - QUOTA_ENTERPRISE=4,4096,204800,-1
+      - METRICS_ENABLED=true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - tenant_manager_logs:/app/logs
+      - tenant_data:/data/openclaw/tenants
+    ports:
+      - "3000:3000"   # API
+      - "9090:9090"   # Metrics
+    networks:
+      - openclaw-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # Nginx - 动态路由和负载均衡
+  nginx:
+    image: nginx:alpine
+    container_name: openclaw-gateway
+    restart: unless-stopped
+    depends_on:
+      tenant-manager:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_cache:/var/cache/nginx
+    networks:
+      - openclaw-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis - 缓存和会话存储（可选）
+  redis:
+    image: redis:7-alpine
+    container_name: openclaw-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis123}
+    volumes:
+      - redis_data:/data
+    networks:
+      - openclaw-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+networks:
+  openclaw-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  portainer_data:
+    driver: local
+  postgres_data:
+    driver: local
+  tenant_manager_logs:
+    driver: local
+  tenant_data:
+    driver: local
+  nginx_cache:
+    driver: local
+  redis_data:
+    driver: local
