@@ -1,0 +1,271 @@
+/**
+ * Settings 页面样式
+ */
+
+.settings-page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  max-width: 800px;
+  margin: 0 auto;
+  background-color: var(--bg-primary, #ffffff);
+  color: var(--text-primary, #111827);
+}
+
+/* 头部 */
+.settings-header {
+  padding: 16px;
+  background-color: var(--bg-secondary, #f9fafb);
+  border-bottom: 1px solid var(--border-color, #e5e7eb);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.settings-header h1 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+  flex: 1;
+}
+
+.back-button {
+  padding: 8px 16px;
+  background: none;
+  border: none;
+  color: var(--accent-color, #3b82f6);
+  font-size: 1rem;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.back-button:hover {
+  text-decoration: underline;
+}
+
+.spacer {
+  width: 60px;
+}
+
+/* 内容区域 */
+.settings-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* 设置区块 */
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-section h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-secondary, #6b7280);
+}
+
+/* 卡片 */
+.status-card,
+.config-card,
+.theme-card,
+.about-card {
+  background-color: var(--bg-secondary, #f9fafb);
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 状态指示器 */
+.status-indicator {
+  font-size: 1rem;
+  font-weight: 600;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background-color: var(--bg-tertiary, #f3f4f6);
+}
+
+.status-indicator.connected {
+  color: var(--success-color, #10b981);
+  background-color: rgba(16, 185, 129, 0.1);
+}
+
+.status-indicator.disconnected {
+  color: var(--error-color, #ef4444);
+  background-color: rgba(239, 68, 68, 0.1);
+}
+
+/* 连接详情 */
+.connection-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.875rem;
+  color: var(--text-secondary, #6b7280);
+}
+
+.connection-details code {
+  background-color: var(--bg-tertiary, #f3f4f6);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 0.8125rem;
+}
+
+/* 操作按钮 */
+.action-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.button {
+  flex: 1;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.button-primary {
+  background-color: var(--accent-color, #3b82f6);
+  color: white;
+}
+
+.button-primary:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.button-danger {
+  background-color: var(--error-color, #ef4444);
+  color: white;
+}
+
+.button-danger:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 表单 */
+.config-card label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary, #111827);
+}
+
+.input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 8px;
+  background-color: var(--bg-primary, #ffffff);
+  color: var(--text-primary, #111827);
+  font-size: 1rem;
+  font-family: inherit;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--accent-color, #3b82f6);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.hint {
+  font-size: 0.8125rem;
+  color: var(--text-tertiary, #9ca3af);
+  margin: 0;
+}
+
+/* 主题选项 */
+.theme-card label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary, #111827);
+}
+
+.theme-options {
+  display: flex;
+  gap: 8px;
+}
+
+.theme-option {
+  flex: 1;
+  padding: 10px 16px;
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 8px;
+  background-color: var(--bg-primary, #ffffff);
+  color: var(--text-primary, #111827);
+  font-size: 0.9375rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.theme-option:hover {
+  border-color: var(--accent-color, #3b82f6);
+}
+
+.theme-option.active {
+  background-color: var(--accent-color, #3b82f6);
+  color: white;
+  border-color: var(--accent-color, #3b82f6);
+}
+
+/* 关于卡片 */
+.about-card p {
+  margin: 4px 0;
+  font-size: 0.875rem;
+  color: var(--text-primary, #111827);
+}
+
+.about-card strong {
+  font-weight: 600;
+}
+
+/* 响应式 */
+@media (max-width: 640px) {
+  .settings-page {
+    max-width: 100%;
+  }
+
+  .settings-content {
+    padding: 12px;
+  }
+
+  .action-buttons {
+    flex-direction: column;
+  }
+}
+
+/* 深色主题 */
+[data-theme='dark'] {
+  .input {
+    background-color: var(--bg-primary, #111827);
+    color: var(--text-primary, #f9fafb);
+  }
+
+  .theme-option {
+    background-color: var(--bg-primary, #111827);
+    color: var(--text-primary, #f9fafb);
+  }
+}

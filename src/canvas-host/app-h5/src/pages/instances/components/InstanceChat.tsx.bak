@@ -1,0 +1,341 @@
+/**
+ * InstanceChat - 实例聊天界面
+ * 使用 A2UI 深色主题颜色
+ */
+
+import { useState, useEffect, useRef } from "react";
+import { Send, Loader2, Wifi, WifiOff } from "lucide-react";
+import type { Instance } from "../../../services/api/tenant";
+import { useWebSocket } from "../../../hooks/useWebSocket";
+
+interface Message {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  timestamp: number;
+}
+
+interface InstanceChatProps {
+  instance: Instance;
+}
+
+export function InstanceChat({ instance }: InstanceChatProps) {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [inputText, setInputText] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // 从 localStorage 加载 WebSocket 配置
+  const [wsConfig, setWsConfig] = useState<{
+    url: string;
+    token: string;
+    role: "operator" | "node";
+  } | null>(null);
+
+  useEffect(() => {
+    const storageKey = `instance-${instance.instanceId}`;
+    const savedConfig = localStorage.getItem(storageKey);
+    if (savedConfig) {
+      try {
+        const config = JSON.parse(savedConfig);
+        setWsConfig(config);
+      } catch (e) {
+        console.error("Failed to load WebSocket config:", e);
+      }
+    }
+  }, [instance.instanceId]);
+
+  // WebSocket 连接
+  const { isConnected, isConnecting, send } = useWebSocket({
+    url: wsConfig?.url || "",
+    token: wsConfig?.token,
+    role: wsConfig?.role,
+    onConnected: () => {
+      console.debug("[InstanceChat] WebSocket connected");
+    },
+    onDisconnected: () => {
+      console.debug("[InstanceChat] WebSocket disconnected");
+    },
+    onError: (error) => {
+      console.error("[InstanceChat] WebSocket error:", error);
+    },
+    onMessage: (message) => {
+      if (message.content) {
+        const aiMessage: Message = {
+          id: `ai-${Date.now()}`,
+          role: message.role || "assistant",
+          content: message.content,
+          timestamp: Date.now(),
+        };
+        setMessages((prev) => [...prev, aiMessage]);
+        setIsLoading(false);
+      }
+    },
+  });
+
+  // 自动滚动到底部
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // 发送消息
+  const handleSend = async () => {
+    if (!inputText.trim() || isLoading) {
+      return;
+    }
+
+    // 检查 WebSocket 连接
+    if (!isConnected) {
+      const errorMessage: Message = {
+        id: `error-${Date.now()}`,
+        role: "assistant",
+        content: "未连接到实例，请先在设置中配置并连接 Gateway。",
+        timestamp: Date.now(),
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+      return;
+    }
+
+    const userMessage: Message = {
+      id: `user-${Date.now()}`,
+      role: "user",
+      content: inputText.trim(),
+      timestamp: Date.now(),
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
+    const messageToSend = inputText.trim();
+    setInputText("");
+    setIsLoading(true);
+
+    try {
+      // 使用 WebSocket 发送消息
+      const success = send({
+        type: "chat",
+        content: messageToSend,
+        role: "user",
+      });
+
+      if (!success) {
+        throw new Error("Failed to send message");
+      }
+    } catch (error) {
+      console.error("发送消息失败:", error);
+      setIsLoading(false);
+      const errorMessage: Message = {
+        id: `error-${Date.now()}`,
+        role: "assistant",
+        content: "抱歉，消息发送失败。请检查连接状态后重试。",
+        timestamp: Date.now(),
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+    }
+  };
+
+  // 键盘事件
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  // 格式化时间
+  const formatTime = (timestamp: number): string => {
+    return new Date(timestamp).toLocaleTimeString("zh-CN", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  return (
+    <div className="flex flex-col h-full" style={{ backgroundColor: "#071016" }}>
+      {/* 连接状态栏 */}
+      <div
+        className="flex-shrink-0 px-4 py-2 flex items-center justify-between"
+        style={{ backgroundColor: "#0f1720", borderBottom: "1px solid #1e293b" }}
+      >
+        <div className="flex items-center gap-2">
+          {isConnected ? (
+            <>
+              <Wifi className="w-4 h-4 text-green-500" />
+              <span className="text-sm text-green-500">已连接</span>
+            </>
+          ) : wsConfig ? (
+            <>
+              <WifiOff className="w-4 h-4 text-gray-500" />
+              <span className="text-sm text-gray-500">
+                {isConnecting ? "连接中..." : "未连接"}
+              </span>
+            </>
+          ) : (
+            <>
+              <WifiOff className="w-4 h-4 text-yellow-500" />
+              <span className="text-sm text-yellow-500">请先配置连接</span>
+            </>
+          )}
+        </div>
+        {wsConfig && !isConnected && (
+          <button
+            onClick={() => window.location.reload()}
+            className="text-xs px-2 py-1 rounded"
+            style={{ backgroundColor: "#1e293b", color: "#94a3b8" }}
+          >
+            刷新
+          </button>
+        )}
+      </div>
+
+      {/* 消息列表 */}
+      <div className="flex-1 overflow-y-auto px-4 py-4">
+        {!wsConfig ? (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center space-y-4">
+              <p className="text-2xl">🔌</p>
+              <p className="text-[#94a3b8]">请先在设置中配置 Gateway 连接</p>
+              <button
+                onClick={() => {
+                  // 触发打开设置面板
+                  const event = new CustomEvent("open-instance-settings");
+                  window.dispatchEvent(event);
+                }}
+                className="px-4 py-2 rounded-lg text-sm"
+                style={{ backgroundColor: "#06b6d4", color: "#ffffff" }}
+              >
+                前往设置
+              </button>
+            </div>
+          </div>
+        ) : messages.length === 0 ? (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center">
+              <p className="text-2xl mb-2">👋</p>
+              <p className="text-[#94a3b8]">开始与 {instance.name} 对话吧！</p>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {messages.map((message) => (
+              <div
+                key={message.id}
+                className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
+              >
+                <div
+                  className="rounded-xl px-4 py-3"
+                  style={{
+                    maxWidth: "80%",
+                    backgroundColor: message.role === "user" ? "#06b6d4" : "#0f1720",
+                    border: message.role === "user" ? "none" : "1px solid #1e293b",
+                  }}
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2" style={{ fontSize: 12 }}>
+                      <span
+                        className="font-medium"
+                        style={{ color: message.role === "user" ? "#ffffff" : "#94a3b8" }}
+                      >
+                        {message.role === "user" ? "你" : instance.name}
+                      </span>
+                      <span
+                        style={{
+                          color: message.role === "user" ? "rgba(255,255,255,0.7)" : "#64748b",
+                        }}
+                      >
+                        {formatTime(message.timestamp)}
+                      </span>
+                    </div>
+                    <p
+                      style={{
+                        color: message.role === "user" ? "#ffffff" : "#ffffff",
+                        whiteSpace: "pre-wrap",
+                        wordBreak: "break-word",
+                        lineHeight: 1.6,
+                        margin: 0,
+                      }}
+                    >
+                      {message.content}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {isLoading && (
+              <div className="flex justify-start">
+                <div
+                  className="rounded-xl px-4 py-3"
+                  style={{ backgroundColor: "#0f1720", border: "1px solid #1e293b" }}
+                >
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 text-[#06b6d4] animate-spin" />
+                    <span className="text-sm text-[#94a3b8]">{instance.name} 正在输入...</span>
+                  </div>
+                </div>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+        )}
+      </div>
+
+      {/* 输入框 */}
+      <div
+        className="flex-shrink-0 px-4 py-3"
+        style={{ backgroundColor: "#0f1720", borderTop: "1px solid #1e293b" }}
+      >
+        <div className="flex gap-2">
+          <textarea
+            rows={1}
+            placeholder={`发送消息给 ${instance.name}... (Enter 发送, Shift+Enter 换行)`}
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={isLoading || !isConnected}
+            className="flex-1 resize-none"
+            style={{
+              backgroundColor: "#1e293b",
+              border: "1px solid #334155",
+              borderRadius: "8px",
+              padding: "12px",
+              color: "#ffffff",
+              fontSize: "16px",
+              fontFamily: "inherit",
+              outline: "none",
+            }}
+            onMouseEnter={(e) => {
+              if (!(e.target as HTMLTextAreaElement).disabled) {
+                (e.target as HTMLTextAreaElement).style.borderColor = "#06b6d4";
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!(e.target as HTMLTextAreaElement).disabled) {
+                (e.target as HTMLTextAreaElement).style.borderColor = "#334155";
+              }
+            }}
+          />
+          <button
+            onClick={handleSend}
+            disabled={!inputText.trim() || isLoading || !isConnected}
+            className="px-4 rounded-lg flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-transform"
+            style={{
+              backgroundColor: "#06b6d4",
+              color: "#ffffff",
+              minWidth: "48px",
+            }}
+            aria-label="发送"
+          >
+            {isLoading ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <Send className="w-5 h-5" />
+            )}
+          </button>
+        </div>
+        {!isConnected && (
+          <p className="text-sm mt-2" style={{ color: "#ef4444" }}>
+            ⚠️ {wsConfig ? "未连接到实例，请刷新页面" : "请先在设置中配置 Gateway 连接"}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}

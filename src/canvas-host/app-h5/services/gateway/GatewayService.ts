@@ -3,20 +3,18 @@
  * 负责与 Gateway 的 WebSocket 连接和消息收发
  */
 
-import {
-  GatewayMessage,
-  GatewayConfig,
-  ConnectionStatus,
-  GatewayListeners
-} from './GatewayTypes';
+import { GatewayMessage, GatewayConfig, ConnectionStatus, GatewayListeners } from "./GatewayTypes";
 
-const DEFAULT_CONFIG: Required<Omit<GatewayConfig, 'token' | 'role'>> & { token?: string; role?: 'operator' | 'node' } = {
-  url: 'ws://localhost:18789',
+const DEFAULT_CONFIG: Required<Omit<GatewayConfig, "token" | "role">> & {
+  token?: string;
+  role?: "operator" | "node";
+} = {
+  url: "ws://localhost:18789",
   autoReconnect: true,
   reconnectDelay: 1000,
   maxReconnectDelay: 30000,
   token: undefined,
-  role: 'operator'
+  role: "operator",
 };
 
 export class GatewayService {
@@ -25,13 +23,13 @@ export class GatewayService {
   private reconnectDelay: number;
   private maxReconnectDelay: number;
   private messageQueue: GatewayMessage[] = [];
-  private status: ConnectionStatus = 'disconnected';
+  private status: ConnectionStatus = "disconnected";
   private listeners: GatewayListeners = {};
   private url: string;
   private connectNonce: string | null = null;
   private handshakeComplete = false;
   private token?: string;
-  private role: 'operator' | 'node';
+  private role: "operator" | "node";
 
   constructor(config: Partial<GatewayConfig> = {}) {
     const finalConfig = { ...DEFAULT_CONFIG, ...config };
@@ -39,7 +37,7 @@ export class GatewayService {
     this.reconnectDelay = finalConfig.reconnectDelay;
     this.maxReconnectDelay = finalConfig.maxReconnectDelay;
     this.token = finalConfig.token;
-    this.role = finalConfig.role || 'operator';
+    this.role = finalConfig.role || "operator";
   }
 
   /**
@@ -47,22 +45,22 @@ export class GatewayService {
    */
   connect(): void {
     if (this.ws?.readyState === WebSocket.OPEN || this.ws?.readyState === WebSocket.CONNECTING) {
-      console.warn('[Gateway] 已经连接或正在连接');
+      console.warn("[Gateway] 已经连接或正在连接");
       return;
     }
 
     console.log(`[Gateway] 连接到 ${this.url}`);
-    this.setStatus('connecting');
+    this.setStatus("connecting");
 
     try {
       this.ws = new WebSocket(this.url);
 
       // eslint-disable-next-line unicorn/prefer-add-event-listener
       this.ws.onopen = () => {
-        console.log('[Gateway] WebSocket 已连接');
+        console.log("[Gateway] WebSocket 已连接");
         this.reconnectDelay = DEFAULT_CONFIG.reconnectDelay;
         // 等待 connect.challenge 事件...
-        this.setStatus('connecting');
+        this.setStatus("connecting");
       };
 
       // eslint-disable-next-line unicorn/prefer-add-event-listener
@@ -71,58 +69,67 @@ export class GatewayService {
           const message = JSON.parse(event.data) as GatewayMessage;
 
           // 详细打印所有消息
-          if (message.type === 'event') {
+          if (message.type === "event") {
             const evtMsg = message as { event?: string; payload?: unknown };
-            console.log('[Gateway] 收到 event:', evtMsg.event, evtMsg.payload);
-          } else if (message.type === 'res') {
+            console.log("[Gateway] 收到 event:", evtMsg.event, evtMsg.payload);
+          } else if (message.type === "res") {
             const resMsg = message as { id?: string; ok?: boolean; payload?: unknown };
-            console.log('[Gateway] 收到 res:', resMsg.id, 'ok:', resMsg.ok);
+            console.log("[Gateway] 收到 res:", resMsg.id, "ok:", resMsg.ok);
           } else {
-            console.log('[Gateway] 收到消息:', message.type);
+            console.log("[Gateway] 收到消息:", message.type);
           }
 
           // 处理 connect.challenge 事件
-          if (message.type === 'event' && (message as { event?: string }).event === 'connect.challenge') {
+          if (
+            message.type === "event" &&
+            (message as { event?: string }).event === "connect.challenge"
+          ) {
             this.handleConnectChallenge(message.payload as { nonce: string; ts: number });
             return;
           }
 
           // 处理 connect 响应
-          if (message.type === 'res') {
+          if (message.type === "res") {
             const response = message as { id?: string; ok?: boolean; payload?: unknown };
-            if (response.id?.startsWith('connect-') && response.ok) {
-              console.log('[Gateway] connect 成功');
+            if (response.id?.startsWith("connect-") && response.ok) {
+              console.log("[Gateway] connect 成功, payload:", response.payload);
               this.handshakeComplete = true;
-              this.setStatus('connected');
+              this.setStatus("connected");
               this.flushMessageQueue();
               this.listeners.onOpen?.();
             }
           }
 
-          this.listeners.onMessage?.(message);
+          // 分发消息给监听器
+          if (this.listeners.onMessage) {
+            console.log("[Gateway] → 分发消息给监听器");
+            this.listeners.onMessage(message);
+          } else {
+            console.log("[Gateway] ⚠️ 没有 onMessage 监听器");
+          }
         } catch (error) {
-          console.error('[Gateway] 消息解析错误:', error);
+          console.error("[Gateway] 消息解析错误:", error);
         }
       };
 
       // eslint-disable-next-line unicorn/prefer-add-event-listener
       this.ws.onerror = (error: Event) => {
-        console.error('[Gateway] WebSocket 错误:', error);
-        this.setStatus('error');
+        console.error("[Gateway] WebSocket 错误:", error);
+        this.setStatus("error");
         this.listeners.onError?.(error);
       };
 
       // eslint-disable-next-line unicorn/prefer-add-event-listener
       this.ws.onclose = () => {
-        console.log('[Gateway] WebSocket 已关闭');
+        console.log("[Gateway] WebSocket 已关闭");
         this.ws = null;
-        this.setStatus('disconnected');
+        this.setStatus("disconnected");
         this.listeners.onClose?.();
         this.scheduleReconnect();
       };
     } catch (error) {
-      console.error('[Gateway] 连接失败:', error);
-      this.setStatus('error');
+      console.error("[Gateway] 连接失败:", error);
+      this.setStatus("error");
     }
   }
 
@@ -143,7 +150,7 @@ export class GatewayService {
     this.messageQueue = [];
     this.connectNonce = null;
     this.handshakeComplete = false;
-    console.log('[Gateway] 已断开连接');
+    console.log("[Gateway] 已断开连接");
   }
 
   /**
@@ -152,9 +159,9 @@ export class GatewayService {
   send(message: GatewayMessage): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(message));
-      console.log('[Gateway] 发送消息:', message.type);
+      console.log("[Gateway] 发送消息:", message.type);
     } else {
-      console.warn('[Gateway] 未连接，消息加入队列');
+      console.warn("[Gateway] 未连接，消息加入队列");
       this.messageQueue.push(message);
     }
   }
@@ -167,7 +174,7 @@ export class GatewayService {
       const message = this.messageQueue.shift();
       if (message) {
         this.ws.send(JSON.stringify(message));
-        console.log('[Gateway] 发送队列消息:', message.type);
+        console.log("[Gateway] 发送队列消息:", message.type);
       }
     }
   }
@@ -196,22 +203,24 @@ export class GatewayService {
   /**
    * 监听连接事件
    */
-  on(event: 'open', callback: () => void): void;
-  on(event: 'message', callback: (message: GatewayMessage) => void): void;
-  on(event: 'error', callback: (error: Event) => void): void;
-  on(event: 'close', callback: () => void): void;
+  on(event: "open", callback: () => void): void;
+  on(event: "message", callback: (message: GatewayMessage) => void): void;
+  on(event: "error", callback: (error: Event) => void): void;
+  on(event: "close", callback: () => void): void;
   on(event: string, callback: unknown): void {
+    console.log("[Gateway] 注册监听器:", event);
     switch (event) {
-      case 'open':
+      case "open":
         this.listeners.onOpen = callback;
         break;
-      case 'message':
+      case "message":
         this.listeners.onMessage = callback;
+        console.log("[Gateway] ✓ onMessage 监听器已设置");
         break;
-      case 'error':
+      case "error":
         this.listeners.onError = callback;
         break;
-      case 'close':
+      case "close":
         this.listeners.onClose = callback;
         break;
     }
@@ -268,7 +277,7 @@ export class GatewayService {
   /**
    * 更新客户端角色
    */
-  setRole(role: 'operator' | 'node'): void {
+  setRole(role: "operator" | "node"): void {
     this.role = role;
   }
 
@@ -276,7 +285,7 @@ export class GatewayService {
    * 处理 connect.challenge 事件
    */
   private handleConnectChallenge(payload: { nonce: string; ts: number }): void {
-    console.log('[Gateway] 收到 connect.challenge, nonce:', payload.nonce);
+    console.log("[Gateway] 收到 connect.challenge, nonce:", payload.nonce);
     this.connectNonce = payload.nonce;
     this.sendConnect();
   }
@@ -286,17 +295,17 @@ export class GatewayService {
    */
   private sendConnect(): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      console.error('[Gateway] WebSocket 未连接，无法发送 connect 请求');
+      console.error("[Gateway] WebSocket 未连接，无法发送 connect 请求");
       return;
     }
 
     // 构建客户端信息 - 使用 Gateway 认可的固定值
     const clientInfo = {
-      id: 'webchat-ui',  // Gateway 认可的客户端 ID
-      displayName: 'OpenClaw H5 Client',
-      version: '1.0.0',
-      platform: 'web',
-      mode: 'webchat'  // Gateway 认可的客户端模式
+      id: "webchat-ui", // Gateway 认可的客户端 ID
+      displayName: "OpenClaw H5 Client",
+      version: "1.0.0",
+      platform: "web",
+      mode: "webchat", // Gateway 认可的客户端模式
     };
 
     // 构建认证信息
@@ -311,9 +320,12 @@ export class GatewayService {
       maxProtocol: 3,
       client: clientInfo,
       role: this.role,
-      scopes: this.role === 'operator' ? ['operator.read', 'operator.write'] : ['node.read', 'node.write'],
-      locale: 'zh-CN',
-      userAgent: 'openclaw-h5/1.0.0'
+      scopes:
+        this.role === "operator"
+          ? ["operator.read", "operator.write"]
+          : ["node.read", "node.write"],
+      locale: "zh-CN",
+      userAgent: "openclaw-h5/1.0.0",
     };
 
     // 如果有 token，添加认证
@@ -322,13 +334,13 @@ export class GatewayService {
     }
 
     const connectRequest = {
-      type: 'req',  // 使用 'req' 而不是 'request'
-      id: 'connect-' + Date.now(),
-      method: 'connect',
-      params: params  // 直接对象，不是 JSON 字符串
+      type: "req", // 使用 'req' 而不是 'request'
+      id: "connect-" + Date.now(),
+      method: "connect",
+      params: params, // 直接对象，不是 JSON 字符串
     };
 
-    console.log('[Gateway] 发送 connect 请求:', JSON.stringify(connectRequest, null, 2));
+    console.log("[Gateway] 发送 connect 请求:", JSON.stringify(connectRequest, null, 2));
     this.ws.send(JSON.stringify(connectRequest));
   }
 }

@@ -38,6 +38,20 @@ export default defineConfig({
     port: 18790,
     strictPort: false,
     host: true,
-    open: true
+    open: true,
+    // API 代理配置
+    // 注意：Vite 按配置顺序匹配，更具体的规则要放在前面
+    proxy: {
+      // 认证 API（更具体的路径，放在前面）
+      '/api/auth': {
+        target: 'http://localhost:3005',
+        changeOrigin: true,
+      },
+      // 业务 API（更通用的路径，放在后面）
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
+    },
   }
 });

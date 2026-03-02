@@ -158,7 +158,10 @@
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "0.13.1",
+    "@liuma/auth-sdk": "workspace:*",
+    "lucide-react": "^0.468.0",
     "@aws-sdk/client-bedrock": "^3.981.0",
+    "react-router-dom": "^7.0.0",
     "@buape/carbon": "0.14.0",
     "@clack/prompts": "^1.0.0",
     "@grammyjs/runner": "^2.0.3",
@@ -224,6 +227,7 @@
     "@types/qrcode-terminal": "^0.12.2",
     "@types/react": "^19.0.6",
     "@types/react-dom": "^19.0.2",
+    "@types/react-router-dom": "^5.3.3",
     "@types/ws": "^8.18.1",
     "@typescript/native-preview": "7.0.0-dev.20260202.1",
     "@vitejs/plugin-react": "^4.7.0",

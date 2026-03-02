@@ -3,6 +3,8 @@ packages:
   - ui
   - packages/*
   - extensions/*
+  - '../liuma/packages/*'
+  - 'multi-tenant/*'
 
 onlyBuiltDependencies:
   - "@whiskeysockets/baileys"

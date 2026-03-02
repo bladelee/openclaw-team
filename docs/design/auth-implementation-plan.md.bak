@@ -1,0 +1,1168 @@
+# Liuma 认证与多主机方案 - 实施计划
+
+> **版本**: v2.0（修正版）
+> **日期**: 2025-02-26
+> **作者**: Liuma Team
+> **状态**: 实施阶段
+
+---
+
+## 目录
+
+1. [现状分析](#现状分析)
+2. [技术选型](#技术选型)
+3. [监控日志方案](#监控日志方案)
+4. [SDK 技术方案](#sdk-技术方案)
+5. [开发计划](#开发计划)
+6. [文档使用指南](#文档使用指南)
+
+---
+
+## 现状分析
+
+### Liuma 当前架构
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                      Liuma 现有架构                                 │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  ┌───────────────────────────────────────────────────────────────┐ │
+│  │  认证层（Better Auth v1.4.9）                                  │ │
+│  │  • 邮箱密码登录                                                 │ │
+│  │  • 社交登录（GitHub/Google/Microsoft/WeChat）                  │ │
+│  │  • RBAC 权限管理（admin/editor/user）                          │ │
+│  │  • 会话管理（7天有效期）                                        │ │
+│  └───────────────────────────────────────────────────────────────┘ │
+│                                                                     │
+│  ┌───────────────────────────────────────────────────────────────┐ │
+│  │  数据层（Drizzle ORM + PostgreSQL）                           │ │
+│  │  • user, session, account, verification 表                   │ │
+│  │  • chat_thread, chat_message 表                               │ │
+│  │  • agent, bookmark, mcp_server 表                             │ │
+│  └───────────────────────────────────────────────────────────────┘ │
+│                                                                     │
+│  ┌───────────────────────────────────────────────────────────────┐ │
+│  │  应用层（Next.js 16 + App Router）                            │ │
+│  │  • AI Agent 聊天                                               │ │
+│  │  • 工作流管理                                                   │ │
+│  │  • MCP 服务器管理                                              │ │
+│  └───────────────────────────────────────────────────────────────┘ │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### 技术栈
+
+| 组件 | 技术 | 版本 | 状态 |
+|------|------|------|------|
+| **框架** | Next.js | 16.0.7 | ✅ 最新 |
+| **认证** | Better Auth | 1.4.9 | ✅ 稳定版 |
+| **数据库** | PostgreSQL | 16+ | ✅ 生产级 |
+| **ORM** | Drizzle ORM | 0.41.0 | ✅ 最新 |
+| **UI** | React + Radix UI | 19.2.3 | ✅ 最新 |
+| **部署** | Docker | - | ✅ 支持 |
+
+### ✅ 优势
+
+1. **完整的认证系统**：Better Auth v1.4.9 已经很成熟
+2. **多社交登录支持**：GitHub/Google/Microsoft/WeChat
+3. **RBAC 权限管理**：完整的角色权限体系
+4. **类型安全**：全栈 TypeScript
+5. **现代化技术栈**：Next.js 16 + React 19
+
+### ❌ 缺失功能
+
+1. **主机配置管理**：无跨设备主机配置同步
+2. **健康检查**：无主机状态监控
+3. **SDK 支持**：无客户端 SDK 供第三方集成
+4. **监控日志**：无统一的监控和日志方案
+5. **API 文档**：无 OpenAPI 规范
+
+---
+
+## 技术选型
+
+### 1. SDK 技术方案对比
+
+#### 方案 A：独立 NPM 包（@liuma/auth-sdk）
+
+**架构**：
+```
+┌─────────────────────────────────────────────┐
+│           @liuma/auth-sdk                   │
+│  ┌───────────────────────────────────────┐  │
+│  │  源码：liuma/packages/auth-sdk       │  │
+│  │  发布：npm.js.org                    │  │
+│  │  版本：独立版本号                     │  │
+│  └───────────────────────────────────────┘  │
+└─────────────────────────────────────────────┘
+           ▲
+           │ npm install @liuma/auth-sdk
+           │
+┌──────────┴──────────┐
+│   客户端应用         │
+│  • app-h5           │
+│  • multi-tenant     │
+│  • 第三方应用       │
+└─────────────────────┘
+```
+
+**优点**：
+- ✅ 版本独立，可按需升级
+- ✅ 包大小可控，Tree-shaking 友好
+- ✅ 适合开源和第三方使用
+- ✅ 发布流程标准化（npm publish）
+
+**缺点**：
+- ❌ 需要维护发布流程
+- ❌ 跨包修改需要重新发布
+- ❌ 版本同步复杂度
+
+**工作量**：3-4 周
+
+---
+
+#### 方案 B：源码直接引用（Monorepo）
+
+**架构**：
+```
+liuma/
+├── packages/
+│   └── auth-sdk/           # SDK 源码
+│       ├── src/
+│       ├── package.json
+│       └── tsconfig.json
+├── src/                    # Liuma 主应用
+└── package.json            # Workspace 根
+
+# 客户端使用
+{
+  "dependencies": {
+    "@liuma/auth-sdk": "workspace:*",  # pnpm
+    # 或
+    "@liuma/auth-sdk": "file:../liuma/packages/auth-sdk"
+  }
+}
+```
+
+**优点**：
+- ✅ 代码复用，零发布成本
+- ✅ 统一版本管理
+- ✅ 开发时实时生效
+- ✅ 类型定义精确
+
+**缺点**：
+- ❌ 需要共享 monorepo
+- ❌ 第三方集成复杂
+- ❌ 构建产物可能较大
+
+**工作量**：2-3 周
+
+---
+
+#### 方案 C：混合方案（推荐 ⭐）
+
+**架构**：
+```
+# 开发阶段：Monorepo 源码引用
+liuma/
+├── packages/
+│   └── auth-sdk/           # SDK 开发
+├── src/                    # Liuma 主应用
+└── examples/
+    ├── app-h5/            # 移动端示例
+    └── multi-tenant/      # PC 端示例
+
+# 内部项目：直接引用源码
+app-h5/package.json:
+  "@liuma/auth-sdk": "workspace:*"
+
+multi-tenant/package.json:
+  "@liuma/auth-sdk": "workspace:*"
+
+# 生产阶段：发布到 npm
+# 第三方集成：npm install @liuma/auth-sdk
+```
+
+**发布策略**：
+```yaml
+开发阶段:
+  - 使用 pnpm workspace 引用
+  - 实时生效，无需发布
+
+内测阶段:
+  - 发布 @liuma/auth-sdk@alpha
+  - 收集反馈
+
+正式发布:
+  - 发布 @liuma/auth-sdk@latest
+  - 维护 CHANGELOG
+```
+
+**优点**：
+- ✅ 开发效率高（实时生效）
+- ✅ 灵活发布（按需发布）
+- ✅ 内外部统一
+- ✅ 版本管理清晰
+
+**缺点**：
+- ⚠️ 需要配置 monorepo
+- ⚠️ workspace 和 npm 包需要区分
+
+**工作量**：2-3 周
+
+---
+
+### 2. 最终推荐
+
+**采用方案 C（混合方案）**：
+
+```bash
+# 项目结构
+liuma/
+├── packages/
+│   └── auth-sdk/               # @liuma/auth-sdk
+│       ├── src/
+│       │   ├── index.ts
+│       │   ├── auth.ts
+│       │   ├── services/
+│       │   ├── storage/
+│       │   └── platforms/
+│       ├── package.json
+│       └── tsup.config.ts
+├── src/                        # Liuma 主应用
+├── examples/
+│   ├── app-h5/                # 移动端（引用 workspace:*）
+│   └── multi-tenant/          # PC 端（引用 workspace:*）
+├── pnpm-workspace.yaml
+└── package.json
+```
+
+**配置示例**：
+
+```yaml
+# pnpm-workspace.yaml
+packages:
+  - 'packages/*'
+  - 'examples/*'
+```
+
+```json
+// packages/auth-sdk/package.json
+{
+  "name": "@liuma/auth-sdk",
+  "version": "0.1.0",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest"
+  }
+}
+```
+
+```json
+// examples/app-h5/package.json
+{
+  "dependencies": {
+    "@liuma/auth-sdk": "workspace:*"  // 开发时引用源码
+  }
+}
+```
+
+---
+
+## 监控日志方案
+
+### 1. 日志系统
+
+#### 技术选型：Winston + 结构化日志
+
+```typescript
+// liuma/src/lib/logger.ts
+import winston from 'winston';
+
+const logger = winston.createLogger({
+  level: process.env.LOG_LEVEL || 'info',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.errors({ stack: true }),
+    winston.format.json()
+  ),
+  defaultMeta: {
+    service: 'liuma-auth',
+    environment: process.env.NODE_ENV,
+  },
+  transports: [
+    // 控制台输出（开发环境）
+    new winston.transports.Console({
+      format: winston.format.combine(
+        winston.format.colorize(),
+        winston.format.simple()
+      ),
+    }),
+    // 文件输出（生产环境）
+    new winston.transports.File({
+      filename: 'logs/error.log',
+      level: 'error',
+      maxsize: 10 * 1024 * 1024, // 10MB
+      maxFiles: 5,
+    }),
+    new winston.transports.File({
+      filename: 'logs/combined.log',
+      maxsize: 10 * 1024 * 1024,
+      maxFiles: 10,
+    }),
+  ],
+});
+
+export default logger;
+```
+
+#### 日志级别规范
+
+```typescript
+enum LogLevel {
+  ERROR = 'error',   // 错误：需要立即处理
+  WARN = 'warn',     // 警告：需要注意但不影响运行
+  INFO = 'info',     // 信息：关键业务流程
+  DEBUG = 'debug',   // 调试：开发调试信息
+}
+
+// 使用示例
+logger.error('Authentication failed', {
+  userId: user.id,
+  email: user.email,
+  error: error.message,
+  stack: error.stack,
+});
+
+logger.info('User logged in', {
+  userId: user.id,
+  provider: 'github',
+  ip: req.ip,
+});
+
+logger.warn('Health check failed', {
+  hostId: host.id,
+  url: host.url,
+  error: error.message,
+});
+```
+
+#### 敏感信息脱敏
+
+```typescript
+// 脱敏规则
+const SENSITIVE_FIELDS = [
+  'password',
+  'token',
+  'secret',
+  'apiKey',
+  'clientSecret',
+];
+
+function sanitize(obj: any): any {
+  if (typeof obj !== 'object' || obj === null) {
+    return obj;
+  }
+
+  const sanitized = { ...obj };
+  for (const key of Object.keys(sanitized)) {
+    if (SENSITIVE_FIELDS.some(field =>
+      key.toLowerCase().includes(field.toLowerCase())
+    )) {
+      sanitized[key] = '[REDACTED]';
+    } else if (typeof sanitized[key] === 'object') {
+      sanitized[key] = sanitize(sanitized[key]);
+    }
+  }
+  return sanitized;
+}
+
+// 使用
+logger.info('Auth config loaded', sanitize(config));
+```
+
+---
+
+### 2. 监控系统
+
+#### 技术选型：自建监控 + Sentry 错误追踪
+
+```typescript
+// liuma/src/lib/monitoring/metrics.ts
+import { register, Counter, Histogram, Gauge } from 'prom-client';
+
+// 创建指标注册表
+export const metricsRegistry = register;
+
+// 认证指标
+export const authMetrics = {
+  // 登录次数（按提供商）
+  loginAttempts: new Counter({
+    name: 'auth_login_attempts_total',
+    help: 'Total number of login attempts',
+    labelNames: ['provider', 'success'],
+    registers: [register],
+  }),
+
+  // 活跃会话数
+  activeSessions: new Gauge({
+    name: 'auth_active_sessions',
+    help: 'Number of active user sessions',
+    registers: [register],
+  }),
+
+  // API 响应时间
+  apiResponseTime: new Histogram({
+    name: 'auth_api_response_time_seconds',
+    help: 'API response time in seconds',
+    labelNames: ['endpoint', 'method'],
+    buckets: [0.1, 0.5, 1, 2, 5, 10],
+    registers: [register],
+  }),
+
+  // 健康检查状态
+  healthCheckStatus: new Gauge({
+    name: 'host_health_check_status',
+    help: 'Health check status (1=online, 0=offline)',
+    labelNames: ['host_id', 'host_type'],
+    registers: [register],
+  }),
+};
+
+// 使用示例
+export function recordLogin(provider: string, success: boolean) {
+  authMetrics.loginAttempts.inc({
+    provider,
+    success: success ? 'true' : 'false',
+  });
+}
+
+export function recordApiLatency(endpoint: string, duration: number) {
+  authMetrics.apiResponseTime.observe({
+    endpoint,
+    method: 'GET',
+  }, duration);
+}
+```
+
+#### Prometheus 指标端点
+
+```typescript
+// liuma/src/app/api/metrics/route.ts
+import { register } from '@/lib/monitoring/metrics';
+import { NextRequest, NextResponse } from 'next/server';
+
+export async function GET(request: NextRequest) {
+  // 仅允许管理员访问
+  const session = await getSession();
+  if (!session?.user?.role?.includes('admin')) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // 返回 Prometheus 格式指标
+  const metrics = await register.metrics();
+
+  return new NextResponse(metrics, {
+    headers: {
+      'Content-Type': register.contentType,
+    },
+  });
+}
+```
+
+#### Grafana 仪表板
+
+```json
+{
+  "dashboard": {
+    "title": "Liuma Auth Monitoring",
+    "panels": [
+      {
+        "title": "Login Attempts (5min)",
+        "targets": [
+          {
+            "expr": "rate(auth_login_attempts_total[5m])",
+            "legendFormat": "{{provider}} - {{success}}"
+          }
+        ]
+      },
+      {
+        "title": "Active Sessions",
+        "targets": [
+          {
+            "expr": "auth_active_sessions"
+          }
+        ]
+      },
+      {
+        "title": "API Response Time (p95)",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, auth_api_response_time_seconds_bucket)",
+            "legendFormat": "{{endpoint}}"
+          }
+        ]
+      },
+      {
+        "title": "Health Check Status",
+        "targets": [
+          {
+            "expr": "host_health_check_status",
+            "legendFormat": "{{host_id}}"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+#### Sentry 错误追踪
+
+```typescript
+// liuma/src/lib/monitoring/sentry.ts
+import * as Sentry from "@sentry/nextjs";
+
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  environment: process.env.NODE_ENV,
+  tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
+
+  beforeSend(event, hint) {
+    // 脱敏敏感信息
+    if (event.request) {
+      delete event.request.cookies;
+      delete event.request.headers;
+    }
+    return event;
+  },
+});
+
+// 使用
+import * as Sentry from "@sentry/nextjs";
+
+try {
+  await auth.login(credentials);
+} catch (error) {
+  Sentry.captureException(error, {
+    tags: {
+      action: 'login',
+      provider: 'github',
+    },
+    extra: {
+      userId: session?.user?.id,
+    },
+  });
+  throw error;
+}
+```
+
+---
+
+### 3. 健康检查端点
+
+```typescript
+// liuma/src/app/api/health/route.ts
+import { NextResponse } from 'next/server';
+import { pgDb } from '@/lib/db/pg/db.pg';
+
+export async function GET() {
+  const checks = {
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    checks: {} as Record<string, any>,
+  };
+
+  // 数据库检查
+  try {
+    await pgDb.execute(sql`SELECT 1`);
+    checks.checks.database = { status: 'ok' };
+  } catch (error) {
+    checks.checks.database = {
+      status: 'error',
+      error: error.message,
+    };
+    checks.status = 'degraded';
+  }
+
+  // Redis 检查（如果使用）
+  if (redis) {
+    try {
+      await redis.ping();
+      checks.checks.redis = { status: 'ok' };
+    } catch (error) {
+      checks.checks.redis = {
+        status: 'error',
+        error: error.message,
+      };
+      checks.status = 'degraded';
+    }
+  }
+
+  // 返回状态码
+  const statusCode = checks.status === 'healthy' ? 200 : 503;
+
+  return NextResponse.json(checks, { status: statusCode });
+}
+```
+
+---
+
+## SDK 技术方案
+
+### 混合方案实施
+
+#### 1. 项目结构
+
+```
+liuma/
+├── packages/
+│   └── auth-sdk/
+│       ├── src/
+│       │   ├── index.ts              # 导出入口
+│       │   ├── auth.ts               # LiumaAuth 主类
+│       │   ├── config.ts             # 配置
+│       │   ├── types.ts              # 类型定义
+│       │   ├── services/
+│       │   │   ├── auth.service.ts
+│       │   │   ├── host.service.ts
+│       │   │   └── sync.service.ts
+│       │   ├── storage/
+│       │   │   ├── adapter.ts        # 存储接口
+│       │   │   ├── web.adapter.ts    # Cookie + localStorage
+│       │   │   ├── mobile.adapter.ts # IndexedDB
+│       │   │   └── factory.ts
+│       │   ├── platforms/
+│       │   │   ├── detector.ts
+│       │   │   └── factory.ts
+│       │   ├── http/
+│       │   │   └── client.ts
+│       │   └── hooks/
+│       │       ├── useAuth.ts
+│       │       ├── useUser.ts
+│       │       └── useHosts.ts
+│       ├── package.json
+│       ├── tsconfig.json
+│       ├── tsup.config.ts
+│       └── README.md
+├── examples/
+│   ├── app-h5/                    # 移动端示例
+│   │   ├── package.json           # "@liuma/auth-sdk": "workspace:*"
+│   │   ├── src/
+│   │   │   ├── lib/
+│   │   │   │   └── auth.ts       # 使用 SDK
+│   │   │   └── ...
+│   │   └── ...
+│   └── multi-tenant/              # PC 端示例
+│       ├── package.json           # "@liuma/auth-sdk": "workspace:*"
+│       └── ...
+├── src/                            # Liuma 主应用
+├── pnpm-workspace.yaml
+└── package.json
+```
+
+#### 2. Workspace 配置
+
+```yaml
+# pnpm-workspace.yaml
+packages:
+  - 'packages/*'
+  - 'examples/*'
+```
+
+#### 3. SDK package.json
+
+```json
+{
+  "name": "@liuma/auth-sdk",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./react": {
+      "import": "./dist/react/index.mjs",
+      "require": "./dist/react/index.js",
+      "types": "./dist/react/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest",
+    "lint": "eslint src",
+    "type-check": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "react": ">=18.0.0"
+  },
+  "dependencies": {
+    "dexie": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.0.0",
+    "typescript": "^5.0.0",
+    "tsup": "^8.0.0",
+    "vitest": "^1.0.0"
+  }
+}
+```
+
+#### 4. 客户端使用
+
+```typescript
+// examples/app-h5/src/lib/auth.ts
+import { LiumaAuth } from '@liuma/auth-sdk';
+
+export const auth = new LiumaAuth({
+  authCenterUrl: process.env.NEXT_PUBLIC_AUTH_CENTER_URL || 'http://localhost:3000',
+  appId: 'app-h5',
+  redirectUri: typeof window !== 'undefined'
+    ? window.location.origin + '/auth/callback'
+    : '',
+  debug: process.env.NODE_ENV === 'development',
+  storagePrefix: 'liuma-h5',
+  offlineMode: true,
+});
+```
+
+---
+
+## 开发计划
+
+### 修正后的时间线（11 周）
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           实施时间线（修正版）                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Week 1: API 设计与基础设施                                                 │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  • OpenAPI 规范设计                                                  │   │
+│  │  • 数据库 Schema 扩展（host_configs 表）                             │   │
+│  │  • 搭建监控系统（Winston + Prometheus）                              │   │
+│  │  • 配置 Monorepo（pnpm workspace）                                  │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+│  Week 2-3: 认证中心后端开发                                                │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  • 主机配置 CRUD API                                                │   │
+│  │  • 健康检查 API                                                      │   │
+│  │  • 同步 API                                                          │   │
+│  │  • 权限验证中间件                                                    │   │
+│  │  • 单元测试 + 集成测试                                              │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+│  Week 4-6: SDK 开发                                                        │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  • 核心类和服务（LiumaAuth, AuthService, HostService）             │   │
+│  │  • 存储适配器（Web/Mobile）                                          │   │
+│  │  • React Hooks                                                       │   │
+│  │  • HTTP 客户端（自动 Token 刷新）                                    │   │
+│  │  • 单元测试                                                          │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+│  Week 7-8: 移动端集成（app-h5）                                            │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  • 集成 @liuma/auth-sdk（workspace 引用）                           │   │
+│  │  • 登录/登出页面                                                     │   │
+│  │  • 主机配置管理 UI                                                  │   │
+│  │  • 主机切换组件                                                      │   │
+│  │  • 离线支持（IndexedDB）                                             │   │
+│  │  • 设备测试                                                          │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+│  Week 9-10: PC 端集成（multi-tenant）                                      │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  • 集成 @liuma/auth-sdk（workspace 引用）                           │   │
+│  │  • 主机配置管理 UI                                                  │   │
+│  │  • 健康状态显示                                                      │   │
+│  │  • 功能测试                                                          │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+│  Week 11: 测试与部署                                                       │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  • 端到端测试                                                        │   │
+│  │  • 性能测试                                                          │   │
+│  │  • 安全测试                                                          │   │
+│  │  • 监控配置                                                          │   │
+│  │  • 文档完善                                                          │   │
+│  │  • 发布准备（内部发布，暂不发布到 npm）                              │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 详细任务清单
+
+#### Week 1: API 设计与基础设施
+
+**API 设计**
+- [ ] 编写 OpenAPI 3.0 规范
+  - [ ] 认证 API（登录/登出/会话）
+  - [ ] 主机配置 API（CRUD）
+  - [ ] 健康检查 API
+  - [ ] 同步 API
+- [ ] 生成 API 文档（Swagger UI）
+- [ ] 定义错误码规范
+
+**数据库扩展**
+- [ ] 添加 `host_configs` 表
+- [ ] 添加索引
+- [ ] 编写迁移脚本
+
+**监控系统**
+- [ ] 配置 Winston 日志
+- [ ] 配置 Prometheus 指标
+- [ ] 配置 Sentry 错误追踪
+- [ ] 创建健康检查端点
+
+**Monorepo 配置**
+- [ ] 配置 pnpm workspace
+- [ ] 创建 `packages/auth-sdk` 目录
+- [ ] 配置 `tsup` 构建
+- [ ] 配置 TypeScript 项目引用
+
+---
+
+#### Week 2-3: 认证中心后端开发
+
+**主机配置 API**
+- [ ] `POST /api/user/hosts` - 创建
+  - [ ] 输入验证（Zod schema）
+  - [ ] 连接验证
+  - [ ] 权限检查
+- [ ] `GET /api/user/hosts` - 列表
+  - [ ] 分页支持
+  - [ ] 排序（默认主机优先）
+- [ ] `PUT /api/user/hosts/:id` - 更新
+  - [ ] 部分更新
+  - [ ] 默认主机处理
+- [ ] `DELETE /api/user/hosts/:id` - 删除
+  - [ ] 权限验证
+- [ ] `POST /api/user/hosts/:id/health` - 健康检查
+  - [ ] 异步执行
+  - [ ] 超时处理（5秒）
+
+**同步 API**
+- [ ] `POST /api/user/hosts/sync` - 同步
+  - [ ] 冲突解决策略（updatedAt 优先）
+  - [ ] 批量操作
+
+**测试**
+- [ ] API 单元测试
+- [ ] 集成测试
+- [ ] 性能测试（响应时间 < 200ms）
+
+---
+
+#### Week 4-6: SDK 开发
+
+**核心类**
+- [ ] `LiumaAuth` 主类
+  - [ ] 配置管理
+  - [ ] 平台检测
+  - [ ] 日志输出
+- [ ] `AuthService` - 认证服务
+  - [ ] 登录/登出
+  - [ ] 会话管理
+  - [ ] Token 刷新
+- [ ] `HostService` - 主机配置服务
+  - [ ] CRUD 操作
+  - [ ] 健康检查
+  - [ ] 默认主机管理
+- [ ] `SyncService` - 同步服务
+  - [ ] 自动同步
+  - [ ] 冲突解决
+  - [ ] 离线支持
+
+**存储适配器**
+- [ ] `IStorageAdapter` 接口
+- [ ] `WebStorageAdapter` - Cookie + localStorage
+- [ ] `MobileStorageAdapter` - IndexedDB (Dexie)
+- [ ] `StorageAdapterFactory` - 工厂类
+
+**React Hooks**
+- [ ] `useAuth` - 认证状态
+- [ ] `useUser` - 用户信息
+- [ ] `useHosts` - 主机配置
+- [ ] `useSession` - 会话管理
+
+**HTTP 客户端**
+- [ ] 封装 fetch API
+- [ ] 自动添加 Token
+- [ ] 自动刷新 Token
+- [ ] 错误处理
+
+**测试**
+- [ ] 单元测试（Vitest）
+- [ ] Mock 服务器
+- [ ] 适配器测试
+
+---
+
+#### Week 7-8: 移动端集成
+
+**SDK 集成**
+- [ ] 安装依赖（`@liuma/auth-sdk` workspace:*）
+- [ ] 配置 SDK 初始化
+- [ ] 配置存储前缀（`liuma-h5`）
+
+**认证页面**
+- [ ] `/auth/signin` - 登录页
+  - [ ] 社交登录按钮
+  - [ ] 邮箱密码登录
+- [ ] `/auth/callback` - OAuth 回调
+  - [ ] 处理 code
+  - [ ] 存储会话
+- [ ] 登录/登出按钮组件
+
+**主机配置管理**
+- [ ] 主机列表页面
+  - [ ] 列表展示
+  - [ ] 健康状态指示
+- [ ] 添加主机对话框
+  - [ ] 表单验证
+  - [ ] 连接测试
+- [ ] 主机切换组件
+  - [ ] 下拉选择
+  - [ ] 默认标记
+
+**离线支持**
+- [ ] IndexedDB 缓存
+- [ ] 自动同步（在线时）
+- [ ] 冲突解决提示
+
+**测试**
+- [ ] 真机测试（iOS/Android）
+- [ ] 离线功能测试
+- [ ] 网络异常测试
+
+---
+
+#### Week 9-10: PC 端集成
+
+**SDK 集成**
+- [ ] 安装依赖（`@liuma/auth-sdk` workspace:*）
+- [ ] 配置 SDK 初始化
+- [ ] 服务端集成（Server Actions）
+
+**主机配置 UI**
+- [ ] 主机列表组件
+  - [ ] 表格展示
+  - [ ] 健康状态列
+- [ ] 主机管理对话框
+  - [ ] 添加/编辑表单
+  - [ ] 删除确认
+- [ ] 健康检查显示
+  - [ ] 实时状态
+  - [ ] 自动刷新
+
+**测试**
+- [ ] 功能测试
+- [ ] 浏览器兼容性测试
+- [ ] 性能测试
+
+---
+
+#### Week 11: 测试与部署
+
+**测试**
+- [ ] 端到端测试（Playwright）
+  - [ ] 登录流程
+  - [ ] 主机配置 CRUD
+  - [ ] 跨设备同步
+- [ ] 性能测试
+  - [ ] API 响应时间
+  - [ ] 并发测试（100 用户）
+- [ ] 安全测试
+  - [ ] Token 刷新
+  - [ ] CSRF 保护
+  - [ ] XSS 防护
+  - [ ] SQL 注入防护
+
+**监控配置**
+- [ ] 配置 Grafana 仪表板
+- [ ] 配置告警规则
+  - [ ] API 错误率 > 5%
+  - [ ] 响应时间 > 1s
+  - [ ] 健康检查失败率 > 10%
+
+**文档**
+- [ ] API 文档（Swagger）
+- [ ] SDK 使用文档
+- [ ] 部署文档
+- [ ] 监控文档
+
+**发布准备**
+- [ ] 内部发布（workspace 模式）
+- [ ] 收集反馈
+- [ ] 准备 npm 发布（未来）
+  - [ ] 配置 npm token
+  - [ ] 编写 CHANGELOG
+
+---
+
+## 文档使用指南
+
+### 阶段与文档映射
+
+| 阶段 | 主要文档 | 次要文档 |
+|------|---------|---------|
+| **Week 1: API 设计** | 本文档（实施计划） | unified-auth-center-design.md |
+| **Week 2-3: 后端开发** | unified-auth-center-design.md | 本文档（API 规范） |
+| **Week 4-6: SDK 开发** | auth-sdk-design.md | 本文档（SDK 架构） |
+| **Week 7-8: 移动端集成** | auth-sdk-design.md（使用指南） | 本文档（集成步骤） |
+| **Week 9-10: PC 端集成** | auth-sdk-design.md（使用指南） | 本文档（集成步骤） |
+| **Week 11: 测试部署** | 本文档（测试清单） | 所有文档 |
+
+### 文档职责划分
+
+#### 1. 实施计划（本文档）
+
+**用途**：
+- 项目总体规划
+- 时间线安排
+- 任务分配
+- 进度跟踪
+
+**更新频率**：每周更新进度
+
+**关键章节**：
+- 开发计划（最重要）
+- 监控日志方案
+- SDK 技术方案
+
+---
+
+#### 2. unified-auth-center-design.md
+
+**用途**：
+- 后端 API 设计
+- 数据库 Schema
+- 安全设计
+- 部署方案
+
+**使用阶段**：Week 2-3
+
+**关键章节**：
+- API 设计
+- 数据库设计
+- 安全设计
+- 部署方案
+
+---
+
+#### 3. auth-sdk-design.md
+
+**用途**：
+- SDK 架构设计
+- 平台适配器
+- 使用指南
+- 开发指南
+
+**使用阶段**：Week 4-10
+
+**关键章节**：
+- SDK 架构
+- 核心模块
+- 平台适配器
+- 使用指南
+
+---
+
+#### 4. auth-and-multihost-solution-summary.md
+
+**用途**：
+- 方案总结
+- 方案对比
+- 架构概览
+
+**使用阶段**：项目启动、对外介绍
+
+**关键章节**：
+- 方案对比
+- 最佳实践
+- 架构设计
+
+---
+
+### 工作流程
+
+```
+项目启动
+  │
+  ├─> 阅读 auth-and-multihost-solution-summary.md
+  │   （了解方案全貌）
+  │
+  ├─> 阅读 unified-auth-center-design.md
+  │   （了解后端设计）
+  │
+  ├─> 阅读 auth-sdk-design.md
+  │   （了解 SDK 设计）
+  │
+  └─> 使用本实施计划（当前文档）
+      （开始开发）
+
+开发过程
+  │
+  ├─> Week 1: 本文档（API 设计）
+  │
+  ├─> Week 2-3: unified-auth-center-design.md + 本文档
+  │
+  ├─> Week 4-6: auth-sdk-design.md + 本文档
+  │
+  ├─> Week 7-8: auth-sdk-design.md（使用指南）+ 本文档
+  │
+  ├─> Week 9-10: auth-sdk-design.md（使用指南）+ 本文档
+  │
+  └─> Week 11: 本文档（测试清单）+ 所有文档
+```
+
+---
+
+## 附录
+
+### 相关文档链接
+
+- [统一认证中心设计文档](./unified-auth-center-design.md)
+- [认证 SDK 设计文档](./auth-sdk-design.md)
+- [方案总结文档](./auth-and-multihost-solution-summary.md)
+
+### 技术文档链接
+
+- [Better Auth 官方文档](https://www.better-auth.com)
+- [Next.js App Router](https://nextjs.org/docs/app)
+- [Drizzle ORM](https://orm.drizzle.team)
+- [Winston 日志库](https://github.com/winstonjs/winston)
+- [Prometheus 监控](https://prometheus.io)
+- [Grafana 可视化](https://grafana.com)
+- [Sentry 错误追踪](https://sentry.io)
+
+### 联系方式
+
+如有问题或建议，请联系 Liuma 开发团队。

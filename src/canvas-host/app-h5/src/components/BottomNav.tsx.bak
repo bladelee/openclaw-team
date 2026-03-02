@@ -1,0 +1,74 @@
+/**
+ * 底部导航栏组件
+ */
+
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Server, LogOut } from "lucide-react";
+import { useAuth } from "../contexts/AuthContext";
+import { useI18n } from "../contexts/I18nContext";
+
+interface NavItem {
+  path: string;
+  label: string;
+  labelKey: string;
+  icon: React.ComponentType<{ className?: string }>;
+}
+
+const navItems: NavItem[] = [
+  { path: "/instances", label: "Instances", labelKey: "instances.title", icon: Server },
+];
+
+export function BottomNav() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
+  const { t } = useI18n();
+
+  const handleLogout = async () => {
+    if (confirm(t("instances.logoutConfirm"))) {
+      await logout();
+      navigate("/login");
+    }
+  };
+
+  // 在实例详情页不显示底部导航
+  if (location.pathname.startsWith("/instances/") && location.pathname !== "/instances") {
+    return null;
+  }
+
+  return (
+    <nav className="fixed bottom-0 left-0 right-0 z-50" style={{ backgroundColor: "#ffffff", borderTop: "1px solid #e5e7eb" }}>
+      <div className="flex items-center justify-around h-16 max-w-md mx-auto">
+        {navItems.map((item) => {
+          const isActive = location.pathname === item.path || location.pathname.startsWith(`${item.path}/`);
+          const Icon = item.icon;
+
+          return (
+            <Link
+              key={item.path}
+              to={item.path}
+              className={`flex flex-col items-center justify-center flex-1 h-full transition-colors ${
+                isActive ? "text-blue-600" : "text-gray-600"
+              }`}
+            >
+              <Icon className={`w-6 h-6 ${isActive ? "fill-current" : ""}`} />
+              <span className="text-xs mt-1">{t(item.labelKey)}</span>
+            </Link>
+          );
+        })}
+
+        {/* 登出按钮 */}
+        {user && (
+          <button
+            onClick={handleLogout}
+            className="flex flex-col items-center justify-center flex-1 h-full transition-colors text-gray-600 hover:text-red-600"
+            aria-label="登出"
+          >
+            <LogOut className="w-6 h-6" />
+            <span className="text-xs mt-1">{t("instances.logout")}</span>
+          </button>
+        )}
+      </div>
+    </nav>
+  );
+}
