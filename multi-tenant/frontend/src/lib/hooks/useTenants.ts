@@ -1,11 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { instancesApi, tenantsApi } from '@/lib/api/tenants';
 import { useAuth } from './useAuth';
+import { useAuthStore } from '@/lib/stores/authStore';
 import type { Instance } from '@/types/tenant';
 
 export function useTenants() {
   const queryClient = useQueryClient();
-  const { isAuthenticated, clearAuth } = useAuth();
+  const { isAuthenticated } = useAuth();
+  const { clearAuth } = useAuthStore();
 
   // 获取当前用户的所有实例
   const {
@@ -90,7 +92,7 @@ export function useTenants() {
 export function useAllTenants() {
   return useQuery({
     queryKey: ['instances', 'all'],
-    queryFn: tenantsApi.listAll,
+    queryFn: () => tenantsApi.listAll(),
     enabled: false, // 手动触发
   });
 }

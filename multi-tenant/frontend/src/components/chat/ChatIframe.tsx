@@ -1,7 +1,10 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import * as LucideIcons from 'lucide-react';
+
+// Type-safe icon wrapper
+const Loader2Icon = LucideIcons.Loader2 as React.ComponentType<React.SVGProps<SVGSVGElement>>;
 
 interface ChatIframeProps {
   url: string;
@@ -35,7 +38,7 @@ export function ChatIframe({ url, onLoad, onError }: ChatIframeProps) {
       {isLoading && (
         <div className="absolute inset-0 flex items-center justify-center bg-background">
           <div className="flex flex-col items-center gap-2">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            <Loader2Icon className="h-8 w-8 animate-spin text-muted-foreground" />
             <p className="text-sm text-muted-foreground">Loading Chat...</p>
           </div>
         </div>

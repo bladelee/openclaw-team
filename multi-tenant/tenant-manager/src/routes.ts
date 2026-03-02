@@ -556,7 +556,7 @@ router.get('/instances/scan-local', authenticateEither, async (req: Authenticate
 });
 
 // 列出所有实例（管理员）
-router.get('/admin/instances', authenticate, requireAdmin, async (req, res) => {
+router.get('/admin/instances', authenticateEither, requireAdmin, async (req: res) => {
   try {
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
@@ -571,7 +571,7 @@ router.get('/admin/instances', authenticate, requireAdmin, async (req, res) => {
 });
 
 // 获取实例统计
-router.get('/admin/instances/stats', authenticate, requireAdmin, async (req, res) => {
+router.get('/admin/instances/stats', authenticateEither, requireAdmin, async (req: res) => {
   try {
     const stats = await instanceService.getStats();
     res.json(stats);

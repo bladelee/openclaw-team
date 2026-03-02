@@ -44,9 +44,10 @@ export class TenantService {
     logger.info('Creating tenant', { userId, tenantId, plan });
 
     // 检查是否已存在
-    const existing = await tenantDb.getByUserId(userId);
+    const existingArray = await tenantDb.getByUserId(userId);
+    const existing = existingArray[0];
     if (existing) {
-      throw new Error(`User ${userId} already has a tenant: ${existing.tenant_id}`);
+      throw new Error(`User ${userId} already has a tenant: ${existing.instance_id}`);
     }
 
     // 选择主机
@@ -130,7 +131,7 @@ export class TenantService {
 
       // 保存到数据库
       await tenantDb.create({
-        tenant_id: tenantId,
+        instance_id: tenantId,
         user_id: userId,
         email,
         plan,
@@ -164,7 +165,7 @@ export class TenantService {
 
       // 清理可能已创建的容器
       try {
-        const existing = await tenantDb.getByTenantId(tenantId);
+        const existing = await tenantDb.getByInstanceId(tenantId);
         if (existing && existing.container_id) {
           await this.portainer.removeContainer(selection.endpointId, existing.container_id, true);
         }
@@ -178,7 +179,8 @@ export class TenantService {
 
   // 获取租户信息
   async getTenant(userId: string): Promise<TenantInfo | null> {
-    const tenant = await tenantDb.getByUserId(userId);
+    const tenants = await tenantDb.getByUserId(userId);
+    const tenant = tenants[0];
 
     if (!tenant) {
       return null;
@@ -196,22 +198,22 @@ export class TenantService {
 
         // 同步状态到数据库
         if (status !== tenant.status) {
-          await tenantDb.update(tenant.tenant_id, { status });
+          await tenantDb.update(tenant.instance_id, { status });
         }
       } catch (error) {
         logger.warn('Failed to get container status', {
-          tenantId: tenant.tenant_id,
+          tenantId: tenant.instance_id,
           error,
         });
       }
     }
 
     return {
-      tenantId: tenant.tenant_id,
+      tenantId: tenant.instance_id,
       userId: tenant.user_id,
       email: tenant.email,
       plan: tenant.plan,
-      url: `https://${tenant.tenant_id}.openclaw.app`,
+      url: `https://${tenant.instance_id}.openclaw.app`,
       status,
       port: tenant.port || undefined,
       createdAt: tenant.created_at,
@@ -220,18 +222,18 @@ export class TenantService {
 
   // 通过 tenant_id 获取租户
   async getTenantByTenantId(tenantId: string): Promise<TenantInfo | null> {
-    const tenant = await tenantDb.getByTenantId(tenantId);
+    const tenant = await tenantDb.getByInstanceId(tenantId);
 
     if (!tenant) {
       return null;
     }
 
     return {
-      tenantId: tenant.tenant_id,
+      tenantId: tenant.instance_id,
       userId: tenant.user_id,
       email: tenant.email,
       plan: tenant.plan,
-      url: `https://${tenant.tenant_id}.openclaw.app`,
+      url: `https://${tenant.instance_id}.openclaw.app`,
       status: tenant.status,
       port: tenant.port || undefined,
       createdAt: tenant.created_at,
@@ -240,13 +242,14 @@ export class TenantService {
 
   // 删除租户
   async deleteTenant(userId: string): Promise<boolean> {
-    const tenant = await tenantDb.getByUserId(userId);
+    const tenants = await tenantDb.getByUserId(userId);
+    const tenant = tenants[0];
 
     if (!tenant) {
       throw new Error(`Tenant not found for user: ${userId}`);
     }
 
-    logger.info('Deleting tenant', { userId, tenantId: tenant.tenant_id });
+    logger.info('Deleting tenant', { userId, tenantId: tenant.instance_id });
 
     if (tenant.container_id && tenant.endpoint_id) {
       try {
@@ -261,12 +264,12 @@ export class TenantService {
         );
 
         logger.info('Container deleted', {
-          tenantId: tenant.tenant_id,
+          tenantId: tenant.instance_id,
           containerId: tenant.container_id,
         });
       } catch (error) {
         logger.error('Failed to delete container', {
-          tenantId: tenant.tenant_id,
+          tenantId: tenant.instance_id,
           error,
         });
         throw error;
@@ -274,62 +277,65 @@ export class TenantService {
     }
 
     // 删除数据库记录
-    const deleted = await tenantDb.delete(tenant.tenant_id);
+    const deleted = await tenantDb.delete(tenant.instance_id);
 
-    logger.info('Tenant deleted', { userId, tenantId: tenant.tenant_id, deleted });
+    logger.info('Tenant deleted', { userId, tenantId: tenant.instance_id, deleted });
 
     return deleted;
   }
 
   // 重启租户
   async restartTenant(userId: string): Promise<void> {
-    const tenant = await tenantDb.getByUserId(userId);
+    const tenants = await tenantDb.getByUserId(userId);
+    const tenant = tenants[0];
 
     if (!tenant) {
       throw new Error(`Tenant not found for user: ${userId}`);
     }
 
     if (!tenant.container_id || !tenant.endpoint_id) {
-      throw new Error(`Tenant has no container: ${tenant.tenant_id}`);
+      throw new Error(`Tenant has no container: ${tenant.instance_id}`);
     }
 
-    logger.info('Restarting tenant', { userId, tenantId: tenant.tenant_id });
+    logger.info('Restarting tenant', { userId, tenantId: tenant.instance_id });
 
     await this.portainer.restartContainer(tenant.endpoint_id, tenant.container_id);
 
     // 更新状态
-    await tenantDb.update(tenant.tenant_id, { status: 'running' });
+    await tenantDb.update(tenant.instance_id, { status: 'running' });
 
-    logger.info('Tenant restarted', { userId, tenantId: tenant.tenant_id });
+    logger.info('Tenant restarted', { userId, tenantId: tenant.instance_id });
   }
 
   // 更新租户计划
   async updatePlan(userId: string, newPlan: Plan): Promise<void> {
-    const tenant = await tenantDb.getByUserId(userId);
+    const tenants = await tenantDb.getByUserId(userId);
+    const tenant = tenants[0];
 
     if (!tenant) {
       throw new Error(`Tenant not found for user: ${userId}`);
     }
 
-    logger.info('Updating tenant plan', { userId, tenantId: tenant.tenant_id, newPlan });
+    logger.info('Updating tenant plan', { userId, tenantId: tenant.instance_id, newPlan });
 
     // TODO: 重新创建容器以应用新配额
     // 目前只更新数据库
-    await tenantDb.update(tenant.tenant_id, { plan: newPlan });
+    await tenantDb.update(tenant.instance_id, { plan: newPlan });
 
-    logger.info('Tenant plan updated', { userId, tenantId: tenant.tenant_id, newPlan });
+    logger.info('Tenant plan updated', { userId, tenantId: tenant.instance_id, newPlan });
   }
 
   // 获取租户日志
   async getLogs(userId: string, tail = 100): Promise<string> {
-    const tenant = await tenantDb.getByUserId(userId);
+    const tenants = await tenantDb.getByUserId(userId);
+    const tenant = tenants[0];
 
     if (!tenant) {
       throw new Error(`Tenant not found for user: ${userId}`);
     }
 
     if (!tenant.container_id || !tenant.endpoint_id) {
-      throw new Error(`Tenant has no container: ${tenant.tenant_id}`);
+      throw new Error(`Tenant has no container: ${tenant.instance_id}`);
     }
 
     return await this.portainer.getContainerLogs(

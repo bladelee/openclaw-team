@@ -12,7 +12,9 @@
     "test:coverage": "vitest --coverage",
     "lint": "oxlint",
     "db:migrate": "tsx scripts/migrate.ts",
-    "db:seed": "tsx scripts/seed.ts"
+    "db:seed": "tsx scripts/seed.ts",
+    "predev": "pnpm db:migrate || true",
+    "prestart": "pnpm db:migrate || true"
   },
   "dependencies": {
     "@types/node": "^20.10.0",

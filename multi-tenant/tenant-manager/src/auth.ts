@@ -1,14 +1,14 @@
+import crypto from "crypto";
+import { Request, Response, NextFunction } from "express";
 // 认证中间件
-import jwt from 'jsonwebtoken';
-import crypto from 'crypto';
-import { Request, Response, NextFunction } from 'express';
-import { config } from './config.js';
-import { logger } from './logger.js';
+import jwt from "jsonwebtoken";
+import { config } from "./config.js";
 
 export interface AuthenticatedRequest extends Request {
   userId?: string;
   userEmail?: string;
   userPlan?: string;
+  authMethod?: "liuma" | "jwt" | "shared-secret";
 }
 
 // JWT Payload
@@ -27,7 +27,7 @@ export function generateToken(payload: JWTPayload): string {
 
 // 生成 Refresh Token
 export function generateRefreshToken(userId: string): string {
-  return jwt.sign({ userId, type: 'refresh' }, config.JWT_SECRET, {
+  return jwt.sign({ userId, type: "refresh" }, config.JWT_SECRET, {
     expiresIn: config.REFRESH_TOKEN_EXPIRES_IN,
   });
 }
@@ -36,8 +36,8 @@ export function generateRefreshToken(userId: string): string {
 export function verifyToken(token: string): JWTPayload {
   try {
     return jwt.verify(token, config.JWT_SECRET) as JWTPayload;
-  } catch (error) {
-    throw new Error('Invalid or expired token');
+  } catch {
+    throw new Error("Invalid or expired token");
   }
 }
 
@@ -47,8 +47,8 @@ export function authenticate(req: AuthenticatedRequest, res: Response, next: Nex
     // 从 Authorization header 获取 token
     const authHeader = req.headers.authorization;
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      res.status(401).json({ error: 'Missing or invalid authorization header' });
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      res.status(401).json({ error: "Missing or invalid authorization header" });
       return;
     }
 
@@ -63,11 +63,8 @@ export function authenticate(req: AuthenticatedRequest, res: Response, next: Nex
     req.userPlan = payload.plan;
 
     next();
-  } catch (error) {
-    logger.warn('Authentication failed', {
-      error: error instanceof Error ? error.message : String(error),
-    });
-    res.status(401).json({ error: 'Invalid or expired token' });
+  } catch {
+    res.status(401).json({ error: "Invalid or expired token" });
   }
 }
 
@@ -76,7 +73,7 @@ export function optionalAuth(req: AuthenticatedRequest, res: Response, next: Nex
   try {
     const authHeader = req.headers.authorization;
 
-    if (authHeader && authHeader.startsWith('Bearer ')) {
+    if (authHeader && authHeader.startsWith("Bearer ")) {
       const token = authHeader.substring(7);
       const payload = verifyToken(token);
       req.userId = payload.userId;
@@ -85,7 +82,7 @@ export function optionalAuth(req: AuthenticatedRequest, res: Response, next: Nex
     }
 
     next();
-  } catch (error) {
+  } catch {
     // 静默失败，继续处理请求
     next();
   }
@@ -95,15 +92,19 @@ export function optionalAuth(req: AuthenticatedRequest, res: Response, next: Nex
 export function requireAdmin(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
   // TODO: 实现管理员检查逻辑
   // 目前简单检查 userPlan
-  if (req.userPlan !== 'enterprise') {
-    res.status(403).json({ error: 'Admin access required' });
+  if (req.userPlan !== "enterprise") {
+    res.status(403).json({ error: "Admin access required" });
     return;
   }
   next();
 }
 
 // OAuth 2.0 验证中间件（可选）
-export function authenticateOAuth(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
+export function authenticateOAuth(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+): void {
   if (!config.OAUTH_ENABLED) {
     return next();
   }
@@ -111,8 +112,8 @@ export function authenticateOAuth(req: AuthenticatedRequest, res: Response, next
   // 从 OAuth 服务器验证 token
   const authHeader = req.headers.authorization;
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    res.status(401).json({ error: 'Missing authorization header' });
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    res.status(401).json({ error: "Missing authorization header" });
     return;
   }
 
@@ -120,20 +121,20 @@ export function authenticateOAuth(req: AuthenticatedRequest, res: Response, next
 
   // 调用 OAuth 服务器的 introspect 端点
   fetch(`${config.OAUTH_ISSUER}/oauth/introspect`, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
+      "Content-Type": "application/x-www-form-urlencoded",
     },
     body: new URLSearchParams({
       token,
-      client_id: 'openclaw-tenant-manager',
-      client_secret: process.env.OAUTH_CLIENT_SECRET || '',
+      client_id: "openclaw-tenant-manager",
+      client_secret: process.env.OAUTH_CLIENT_SECRET || "",
     }),
   })
     .then((response) => response.json())
     .then((data) => {
       if (!data.active) {
-        res.status(401).json({ error: 'Token is not active' });
+        res.status(401).json({ error: "Token is not active" });
         return;
       }
 
@@ -144,9 +145,42 @@ export function authenticateOAuth(req: AuthenticatedRequest, res: Response, next
 
       next();
     })
-    .catch((error) => {
-      logger.error('OAuth authentication failed', { error });
-      res.status(500).json({ error: 'Authentication failed' });
+    .catch(() => {
+      res.status(500).json({ error: "Authentication failed" });
+    });
+}
+
+// ============ Liuma Authentication ============
+
+/**
+ * Liuma 认证中间件
+ * 仅支持 Liuma Bearer token
+ */
+export function authenticateLiuma(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+): void {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    res.status(401).json({ error: "Missing Liuma Bearer token" });
+    return;
+  }
+
+  const token = authHeader.substring(7);
+
+  // 动态导入以避免循环依赖
+  import("./liuma.js")
+    .then(({ verifyLiumaToken }) => verifyLiumaToken(token))
+    .then((liumaUser) => {
+      req.userId = liumaUser.userId;
+      req.userEmail = liumaUser.email;
+      req.authMethod = "liuma";
+      next();
+    })
+    .catch(() => {
+      res.status(401).json({ error: "Liuma authentication failed" });
     });
 }
 
@@ -157,15 +191,15 @@ export function generateSignature(userId: string): string {
   const timestamp = Date.now();
   const payload = `${userId}:${timestamp}`;
   const signature = crypto
-    .createHmac('sha256', config.SHARED_SECRET_KEY)
+    .createHmac("sha256", config.SHARED_SECRET_KEY)
     .update(payload)
-    .digest('hex');
+    .digest("hex");
   return `${signature}:${timestamp}`;
 }
 
 // 验证 HMAC 签名
 function verifySignature(userId: string, signature: string): boolean {
-  const parts = signature.split(':');
+  const parts = signature.split(":");
   if (parts.length !== 2) {
     return false;
   }
@@ -176,22 +210,22 @@ function verifySignature(userId: string, signature: string): boolean {
   // 检查时间戳（防重放）
   const timeDiff = Math.abs(Date.now() - timestamp);
   if (timeDiff > config.SIGNATURE_TOLERANCE * 1000) {
-    logger.warn('Signature expired', { userId, timeDiff });
+    logger.warn("Signature expired", { userId, timeDiff });
     return false;
   }
 
   // 重新计算签名
   const payload = `${userId}:${timestamp}`;
   const expectedSignature = crypto
-    .createHmac('sha256', config.SHARED_SECRET_KEY)
+    .createHmac("sha256", config.SHARED_SECRET_KEY)
     .update(payload)
-    .digest('hex');
+    .digest("hex");
 
   // 使用 timing-safe 比较
   try {
     return crypto.timingSafeEqual(
-      Buffer.from(expectedSignature, 'hex'),
-      Buffer.from(receivedSignature, 'hex')
+      Buffer.from(expectedSignature, "hex"),
+      Buffer.from(receivedSignature, "hex"),
     );
   } catch {
     return false;
@@ -199,25 +233,28 @@ function verifySignature(userId: string, signature: string): boolean {
 }
 
 // Shared Secret 认证中间件（用于 SSO 集成）
-export function authenticateSharedSecret(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
+export function authenticateSharedSecret(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+): void {
   try {
-    const userId = req.headers['x-user-id'] as string;
-    const userEmail = req.headers['x-user-email'] as string;
-    const userSignature = req.headers['x-user-signature'] as string;
+    const userId = req.headers["x-user-id"] as string;
+    const userEmail = req.headers["x-user-email"] as string;
+    const userSignature = req.headers["x-user-signature"] as string;
 
     if (!userId || !userEmail) {
-      res.status(401).json({ error: 'Missing user information headers' });
+      res.status(401).json({ error: "Missing user information headers" });
       return;
     }
 
     if (!userSignature) {
-      res.status(401).json({ error: 'Missing signature header' });
+      res.status(401).json({ error: "Missing signature header" });
       return;
     }
 
     if (!verifySignature(userId, userSignature)) {
-      logger.warn('Invalid signature', { userId, userEmail });
-      res.status(401).json({ error: 'Invalid signature' });
+      res.status(401).json({ error: "Invalid signature" });
       return;
     }
 
@@ -226,24 +263,55 @@ export function authenticateSharedSecret(req: AuthenticatedRequest, res: Respons
     req.userEmail = userEmail;
 
     next();
-  } catch (error) {
-    logger.error('Shared secret authentication failed', { error });
-    res.status(401).json({ error: 'Authentication failed' });
+  } catch {
+    res.status(401).json({ error: "Authentication failed" });
   }
 }
 
-// 双重认证中间件（支持 JWT 或 Shared Secret）
-export function authenticateEither(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
+// 双重认证中间件（支持 Liuma token、JWT 或 Shared Secret）
+export function authenticateEither(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+): void {
   const authHeader = req.headers.authorization;
-  const userSignature = req.headers['x-user-signature'] as string;
+  const userSignature = req.headers["x-user-signature"] as string;
 
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    // 使用 JWT 认证
-    authenticate(req, res, next);
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const token = authHeader.substring(7);
+
+    // 动态导入 verifyLiumaToken 以避免循环依赖
+    import("./liuma.js")
+      .then(({ verifyLiumaToken }) => {
+        // 尝试 Liuma token 验证（新增）
+        return verifyLiumaToken(token);
+      })
+      .then((liumaUser) => {
+        req.userId = liumaUser.userId;
+        req.userEmail = liumaUser.email;
+        req.authMethod = "liuma";
+        next();
+      })
+      .catch(() => {
+        // Liuma 验证失败，尝试 JWT（回退）
+        try {
+          const payload = verifyToken(token);
+          req.userId = payload.userId;
+          req.userEmail = payload.email;
+          req.userPlan = payload.plan;
+          req.authMethod = "jwt";
+          next();
+        } catch {
+          // JWT 也失败，返回未授权
+          res.status(401).json({ error: "Invalid token" });
+        }
+      });
+
+    return; // 等待异步结果
   } else if (userSignature) {
     // 使用 Shared Secret 认证
     authenticateSharedSecret(req, res, next);
   } else {
-    res.status(401).json({ error: 'Missing authorization' });
+    res.status(401).json({ error: "Missing authorization" });
   }
 }

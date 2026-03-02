@@ -10,8 +10,11 @@ import {
   DrawerBody,
 } from '@/components/ui/drawer';
 import { ChatIframe } from './ChatIframe';
-import { ExternalLink } from 'lucide-react';
+import * as LucideIcons from 'lucide-react';
 import { Button } from '@/components/ui/button';
+
+// Type-safe icon wrapper
+const ExternalLinkIcon = LucideIcons.ExternalLink as React.ComponentType<React.SVGProps<SVGSVGElement>>;
 
 interface ChatDrawerProps {
   instanceUrl: string;
@@ -45,7 +48,7 @@ export function ChatDrawer({
                 onClick={handleOpenInNewTab}
                 className="gap-1"
               >
-                <ExternalLink className="h-4 w-4" />
+                <ExternalLinkIcon className="h-4 w-4" />
                 New Window
               </Button>
               <DrawerClose />
@@ -62,7 +65,7 @@ export function ChatDrawer({
 
 interface UseChatDrawerResult {
   isOpen: boolean;
-  openChat: () => void;
+  openChat: (url: string, name: string) => void;
   closeChat: () => void;
   ChatDrawerComponent: React.FC<{ instanceUrl: string; instanceName: string }>;
 }

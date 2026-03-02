@@ -2,72 +2,96 @@ import { useCallback } from 'react';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { authApi } from '@/lib/api/auth';
 import { useRouter } from 'next/navigation';
+import { useAuthContext } from '@/contexts/AuthContext';
 
+/**
+ * Auth Hook
+ *
+ * Provides authentication methods
+ * Integrates with both Liuma Auth SDK and legacy authentication
+ */
 export function useAuth() {
   const router = useRouter();
-  const { user, token, isAuthenticated, setAuth, clearAuth } = useAuthStore();
+  const { user, isAuthenticated, login: liumaLogin, loginWithLegacy, loginWithDevMode, logout: liumaLogout } = useAuthContext();
+  const { user: storeUser, token, setAuth, clearAuth } = useAuthStore();
 
-  // 密码登录
+  // Use Liuma user if available, otherwise fall back to store user
+  const currentUser = user || storeUser;
+
+  // Password login (legacy)
   const login = useCallback(async (email: string, password: string) => {
-    const response = await authApi.login({ email, password });
-    // Use the userId returned by backend, not email.split('@')[0]
-    const user = {
-      userId: response.userId,
-      email: response.email || email,
-      plan: response.plan || 'basic',
-    };
-    setAuth(user, response.token);
-    localStorage.setItem('token', response.token);
-    localStorage.setItem('refreshToken', response.refreshToken);
-  }, [setAuth]);
+    // Get token from AuthContext which handles the actual login
+    await loginWithLegacy(email, password);
 
-  // 开发环境快捷登录（使用 Shared Secret）
-  // 注意：只进行身份验证，不自动创建租户
-  const loginWithDevMode = useCallback(async (userId: string, email: string) => {
-    // 调用登录接口获取真实的 JWT token
-    const response = await authApi.login({ email, password: 'dev-mode-placeholder' });
+    // Also update Zustand store for backward compatibility
+    // Get token from localStorage (set by AuthContext)
+    const token = localStorage.getItem('token');
+    if (token) {
+      // Parse JWT to get userId, or derive from email
+      let userId = email.split('@')[0];
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        userId = payload.userId || userId;
+      } catch {
+        // Use derived userId if parsing fails
+      }
 
-    // Use the userId returned by backend for consistency
-    const backendUserId = response.userId || email.split('@')[0];
+      const userObj = {
+        userId,
+        email,
+        plan: 'basic',
+      };
+      setAuth(userObj, token);
+    }
+  }, [loginWithLegacy, setAuth]);
 
-    // 保存用户信息供后续创建租户使用
+  // Dev mode login (legacy)
+  const loginWithDevModeLegacy = useCallback(async (userId: string, email: string) => {
+    await loginWithDevMode(userId, email);
+
+    // Also update Zustand store for backward compatibility
+    // Get token from localStorage (set by AuthContext)
+    const token = localStorage.getItem('token');
+    const backendUserId = userId || email.split('@')[0];
+
     localStorage.setItem('userId', backendUserId);
     localStorage.setItem('userEmail', email);
 
-    const user = {
+    const userObj = {
       userId: backendUserId,
       email,
       plan: 'basic',
     };
-    setAuth(user, response.token);
-    localStorage.setItem('token', response.token);
-    localStorage.setItem('refreshToken', response.refreshToken);
+    if (token) {
+      setAuth(userObj, token);
+    }
+  }, [loginWithDevMode, setAuth]);
 
-    return { success: true };
-  }, [setAuth]);
+  // OAuth login (Liuma)
+  const loginWithOAuth = useCallback(async (provider: 'google' | 'github' | 'wechat') => {
+    await liumaLogin(provider);
+  }, [liumaLogin]);
 
-  // OAuth 登录
-  const loginWithOAuth = useCallback((provider: 'google' | 'github') => {
-    // 在实际实现中，这里会跳转到 OAuth 提供商
-    window.location.href = `/api/auth/${provider}`;
-  }, []);
-
-  // 登出
+  // Logout
   const logout = useCallback(async () => {
+    await liumaLogout();
+
+    // Also clear Zustand store
     clearAuth();
     localStorage.removeItem('token');
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('signature');
+
     router.push('/login');
-  }, [clearAuth, router]);
+  }, [liumaLogout, clearAuth, router]);
 
   return {
-    user,
+    user: currentUser,
     token,
     isAuthenticated,
     login,
     loginWithOAuth,
-    loginWithDevMode,
+    loginWithDevMode: loginWithDevModeLegacy,
     logout,
   };
 }

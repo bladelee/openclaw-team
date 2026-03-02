@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { MessageSquare } from 'lucide-react';
+import * as LucideIcons from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Tooltip,
@@ -9,6 +9,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+
+// Type-safe icon wrapper
+const MessageSquareIcon = LucideIcons.MessageSquare as React.ComponentType<React.SVGProps<SVGSVGElement>>;
 
 interface ChatButtonProps {
   onClick?: () => void;
@@ -28,7 +31,7 @@ export function ChatButton({ onClick, disabled = false, className }: ChatButtonP
             onClick={onClick}
             disabled={disabled}
           >
-            <MessageSquare className="h-4 w-4" />
+            <MessageSquareIcon className="h-4 w-4" />
           </Button>
         </TooltipTrigger>
         <TooltipContent>

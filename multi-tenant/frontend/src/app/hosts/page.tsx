@@ -40,7 +40,7 @@ export default function HostsPage() {
             </div>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="icon" onClick={refresh} disabled={isLoading}>
+            <Button variant="outline" size="icon" onClick={() => refresh()} disabled={isLoading}>
               <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
             </Button>
             <Button variant="outline" onClick={() => router.push('/dashboard')}>

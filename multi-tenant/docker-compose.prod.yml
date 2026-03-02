@@ -1,0 +1,178 @@
+# OpenClaw 多租户管理服务 - 生产环境 Docker Compose 配置
+# 使用前请先配置 .env 文件
+
+version: '3.8'
+
+services:
+  # ==================== 数据库 ====================
+  postgres:
+    image: postgres:16-alpine
+    container_name: openclaw-postgres
+    restart: always
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    networks:
+      - openclaw-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_buffers=256MB"
+      - "-c"
+      - "max_connections=200"
+      - "max_wal_size=1GB"
+
+  # ==================== 缓存 ====================
+  redis:
+    image: redis:7-alpine
+    container_name: openclaw-redis
+    restart: always
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD}
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - ./data/redis:/data
+    networks:
+      - openclaw-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ==================== 租户管理服务 ====================
+  tenant-manager:
+    build:
+      context: ./tenant-manager
+      dockerfile: Dockerfile
+    image: openclaw/tenant-manager:latest
+    container_name: openclaw-tenant-manager
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - JWT_SECRET=${JWT_SECRET}
+      - DEFAULT_PLAN=basic
+      - DATA_DIR=/data/openclaw/tenants
+      - QUOTA_FREE=${QUOTA_FREE:-0.5,512,5120,1}
+      - QUOTA_BASIC=${QUOTA_BASIC:-1,1024,20480,3}
+      - QUOTA_PRO=${QUOTA_PRO:-2,2048,51200,10}
+      - QUOTA_ENTERPRISE=${QUOTA_ENTERPRISE:-4,4096,204800,-1}
+      - METRICS_ENABLED=true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./logs/tenant-manager:/app/logs
+      - ./data/tenant:/data/openclaw/tenants
+    ports:
+      - "3000:3000"
+      - "9090:9090"
+    networks:
+      - openclaw-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # ==================== PC前端 ====================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: openclaw/frontend:latest
+    container_name: openclaw-frontend
+    restart: always
+    depends_on:
+      tenant-manager:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=production
+      - PORT=3002
+      - NEXT_PUBLIC_API_URL=https://api.${DOMAIN}
+      - NEXT_PUBLIC_BACKEND_URL=https://api.${DOMAIN}
+      - NEXT_PUBLIC_APP_URL=https://${DOMAIN}
+      - NEXT_PUBLIC_LIUMA_URL=${NEXT_PUBLIC_LIUMA_URL}
+      - NEXT_PUBLIC_APP_ID=${NEXT_PUBLIC_APP_ID}
+    ports:
+      - "3002:3002"
+    networks:
+      - openclaw-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3002"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  # ==================== Nginx 反向代理 ====================
+  nginx:
+    image: nginx:alpine
+    container_name: openclaw-nginx
+    restart: always
+    depends_on:
+      - frontend
+      - tenant-manager
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./data/nginx/ssl:/etc/nginx/ssl:ro
+      - ./logs/nginx:/var/log/nginx
+      - nginx_cache:/var/cache/nginx
+    networks:
+      - openclaw-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  openclaw-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  postgres_data:
+  redis_data:
+  tenant_manager_logs:
+  tenant_data:
+  nginx_cache:

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -8,27 +8,37 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, Chrome, Github, Rocket, Shield } from 'lucide-react';
+import * as LucideIcons from 'lucide-react';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useAuthStore } from '@/lib/stores/authStore';
+
+// Type-safe icon wrappers
+const Loader2Icon = LucideIcons.Loader2 as React.ComponentType<React.SVGProps<SVGSVGElement>>;
+const ChromeIcon = LucideIcons.Chrome as React.ComponentType<React.SVGProps<SVGSVGElement>>;
+const GithubIcon = LucideIcons.Github as React.ComponentType<React.SVGProps<SVGSVGElement>>;
+const RocketIcon = LucideIcons.Rocket as React.ComponentType<React.SVGProps<SVGSVGElement>>;
+const ShieldIcon = LucideIcons.Shield as React.ComponentType<React.SVGProps<SVGSVGElement>>;
+const MessageCircleIcon = LucideIcons.MessageCircle as React.ComponentType<React.SVGProps<SVGSVGElement>>;
 
 const CASDOOR_ENABLED = process.env.NEXT_PUBLIC_CASDOOR_ENABLED === 'true';
 const CASDOOR_ENDPOINT = process.env.NEXT_PUBLIC_CASDOOR_ENDPOINT || 'http://localhost:8000';
 
-export default function LoginPage() {
+function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { login, loginWithDevMode } = useAuth();
-  const { isAuthenticated, setAuth, clearAuth } = useAuthStore();
+  const { login, loginWithOAuth, loginWithDevMode } = useAuth();
+  const { isAuthenticated, setAuth } = useAuthStore();
 
   // 检查 URL 中的 token（从 Casdoor 回调）
+  const [error, setError] = useState('');
+
   useEffect(() => {
     const token = searchParams.get('token');
     const refreshToken = searchParams.get('refreshToken');
-    const error = searchParams.get('error');
+    const urlError = searchParams.get('error');
 
-    if (error) {
-      setError(error);
+    if (urlError) {
+      setError(urlError);
       // 清除 URL 中的错误参数
       router.replace('/login');
       return;
@@ -59,7 +69,6 @@ export default function LoginPage() {
   const [devUserId, setDevUserId] = useState('test-user-' + Math.random().toString(36).substring(7));
   const [devEmail, setDevEmail] = useState('dev@example.com');
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -97,9 +106,10 @@ export default function LoginPage() {
     window.location.href = `${backendUrl}/api/auth/casdoor/login?redirect=${redirectUrl}`;
   };
 
-  const handleOAuthLogin = (provider: 'google' | 'github') => {
-    // 在实际实现中，这里会跳转到 OAuth 提供商
-    alert(`${provider} OAuth 登录暂未实现`);
+  const handleOAuthLogin = (provider: 'google' | 'github' | 'wechat') => {
+    // 使用 Liuma Auth SDK 进行 OAuth 登录
+    // 这会重定向到 Liuma 认证中心
+    loginWithOAuth(provider);
   };
 
   // 简单的 JWT 解析函数
@@ -124,13 +134,64 @@ export default function LoginPage() {
         </CardHeader>
 
         <CardContent>
-          <Tabs defaultValue="casdoor" className="w-full">
+          <Tabs defaultValue="liuma" className="w-full">
             <TabsList className="grid w-full grid-cols-4">
+              <TabsTrigger value="liuma">Liuma</TabsTrigger>
               <TabsTrigger value="casdoor">SSO</TabsTrigger>
               <TabsTrigger value="dev">开发</TabsTrigger>
-              <TabsTrigger value="oauth">OAuth</TabsTrigger>
               <TabsTrigger value="password">密码</TabsTrigger>
             </TabsList>
+
+            {/* Liuma OAuth 登录 (主要登录方式) */}
+            <TabsContent value="liuma" className="space-y-4">
+              <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                <p className="text-sm text-blue-700 dark:text-blue-300 mb-4">
+                  使用 Liuma 统一认证中心登录，支持 Google、GitHub 等多种方式。
+                </p>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full mb-3"
+                  onClick={() => handleOAuthLogin('google')}
+                  disabled={isLoading}
+                >
+                  <ChromeIcon className="mr-2 h-4 w-4" />
+                  使用 Google 登录
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full mb-3"
+                  onClick={() => handleOAuthLogin('github')}
+                  disabled={isLoading}
+                >
+                  <GithubIcon className="mr-2 h-4 w-4" />
+                  使用 GitHub 登录
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => handleOAuthLogin('wechat')}
+                  disabled={isLoading}
+                >
+                  <MessageCircleIcon className="mr-2 h-4 w-4" />
+                  使用微信登录
+                </Button>
+              </div>
+
+              <div className="bg-slate-50 dark:bg-slate-800 border rounded-lg p-3 text-xs text-muted-foreground">
+                <p className="font-medium mb-1">Liuma 统一认证:</p>
+                <ul className="space-y-1">
+                  <li>• 支持 Google、GitHub、Microsoft、微信登录</li>
+                  <li>• 跨应用单点登录 (SSO)</li>
+                  <li>• 自动 Token 管理</li>
+                </ul>
+              </div>
+            </TabsContent>
 
             {/* Casdoor SSO 登录 */}
             <TabsContent value="casdoor" className="space-y-4">
@@ -141,7 +202,7 @@ export default function LoginPage() {
                 onClick={handleCasdoorLogin}
                 disabled={isLoading || !CASDOOR_ENABLED}
               >
-                <Shield className="mr-2 h-4 w-4" />
+                <ShieldIcon className="mr-2 h-4 w-4" />
                 使用 Casdoor 登录
               </Button>
 
@@ -165,7 +226,7 @@ export default function LoginPage() {
             <TabsContent value="dev" className="space-y-4">
               <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
                 <div className="flex items-center gap-2 mb-2 text-blue-700 dark:text-blue-300">
-                  <Rocket className="h-4 w-4" />
+                  <RocketIcon className="h-4 w-4" />
                   <span className="font-medium">开发环境</span>
                 </div>
                 <p className="text-sm text-blue-600 dark:text-blue-400 mb-4">
@@ -200,7 +261,7 @@ export default function LoginPage() {
                   >
                     {isLoading ? (
                       <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />
                         登录中...
                       </>
                     ) : (
@@ -209,35 +270,6 @@ export default function LoginPage() {
                   </Button>
                 </div>
               </div>
-            </TabsContent>
-
-            {/* OAuth 登录 */}
-            <TabsContent value="oauth" className="space-y-4">
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full"
-                onClick={() => handleOAuthLogin('google')}
-                disabled={isLoading}
-              >
-                <Chrome className="mr-2 h-4 w-4" />
-                使用 Google 登录
-              </Button>
-
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full"
-                onClick={() => handleOAuthLogin('github')}
-                disabled={isLoading}
-              >
-                <Github className="mr-2 h-4 w-4" />
-                使用 GitHub 登录
-              </Button>
-
-              <p className="text-xs text-center text-muted-foreground">
-                OAuth 登录需要配置 Better-auth
-              </p>
             </TabsContent>
 
             {/* 密码登录 */}
@@ -272,7 +304,7 @@ export default function LoginPage() {
                 <Button type="submit" className="w-full" disabled={isLoading}>
                   {isLoading ? (
                     <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />
                       登录中...
                     </>
                   ) : (
@@ -295,5 +327,22 @@ export default function LoginPage() {
         </div>
       </Card>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="flex flex-col items-center justify-center py-8">
+            <Loader2Icon className="w-16 h-16 text-blue-600 animate-spin mb-4" />
+            <p className="text-lg text-muted-foreground">加载中...</p>
+          </CardContent>
+        </Card>
+      </div>
+    }>
+      <LoginPageContent />
+    </Suspense>
   );
 }

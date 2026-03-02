@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useTenants } from '@/lib/hooks/useTenants';
@@ -9,7 +9,7 @@ import { useAuthStore } from '@/lib/stores/authStore';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, RefreshCw, Settings, LogOut, Server, ExternalLink, Trash2, Loader2, Copy, Check, Cloud, HardDrive } from 'lucide-react';
+import * as LucideIcons from 'lucide-react';
 import { formatRelativeTime } from '@/lib/utils';
 import { useState } from 'react';
 import { ChatButton } from '@/components/chat/ChatButton';
@@ -17,7 +17,21 @@ import { ChatDrawer, useChatDrawer } from '@/components/chat/ChatDrawer';
 import { instancesApi } from '@/lib/api/tenants';
 import type { RegisterCustomInstanceInput } from '@/types/tenant';
 
-export default function DashboardPage() {
+// Type-safe icon wrappers
+const PlusIcon = LucideIcons.Plus as React.ComponentType<React.SVGProps<SVGSVGElement>>;
+const RefreshCwIcon = LucideIcons.RefreshCw as React.ComponentType<React.SVGProps<SVGSVGElement>>;
+const SettingsIcon = LucideIcons.Settings as React.ComponentType<React.SVGProps<SVGSVGElement>>;
+const LogOutIcon = LucideIcons.LogOut as React.ComponentType<React.SVGProps<SVGSVGElement>>;
+const ServerIcon = LucideIcons.Server as React.ComponentType<React.SVGProps<SVGSVGElement>>;
+const ExternalLinkIcon = LucideIcons.ExternalLink as React.ComponentType<React.SVGProps<SVGSVGElement>>;
+const Trash2Icon = LucideIcons.Trash2 as React.ComponentType<React.SVGProps<SVGSVGElement>>;
+const Loader2Icon = LucideIcons.Loader2 as React.ComponentType<React.SVGProps<SVGSVGElement>>;
+const CopyIcon = LucideIcons.Copy as React.ComponentType<React.SVGProps<SVGSVGElement>>;
+const CheckIcon = LucideIcons.Check as React.ComponentType<React.SVGProps<SVGSVGElement>>;
+const CloudIcon = LucideIcons.Cloud as React.ComponentType<React.SVGProps<SVGSVGElement>>;
+const HardDriveIcon = LucideIcons.HardDrive as React.ComponentType<React.SVGProps<SVGSVGElement>>;
+
+function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, logout, isAuthenticated } = useAuth();
@@ -258,7 +272,7 @@ export default function DashboardPage() {
   if (!isAuthenticated && !storeUser) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" />
+        <Loader2Icon className="h-8 w-8 animate-spin" />
       </div>
     );
   }
@@ -285,13 +299,13 @@ export default function DashboardPage() {
           </div>
           <div className="flex gap-2">
             <Button variant="outline" size="icon" onClick={refresh} disabled={isLoading}>
-              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+              <RefreshCwIcon className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
             </Button>
             <Button variant="outline" size="icon" onClick={() => router.push('/hosts')}>
-              <Server className="h-4 w-4" />
+              <ServerIcon className="h-4 w-4" />
             </Button>
             <Button variant="outline" size="icon" onClick={handleLogout}>
-              <LogOut className="h-4 w-4" />
+              <LogOutIcon className="h-4 w-4" />
             </Button>
           </div>
         </div>
@@ -309,11 +323,11 @@ export default function DashboardPage() {
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setShowCustomModal(true)}>
-              <Cloud className="mr-2 h-4 w-4" />
+              <CloudIcon className="mr-2 h-4 w-4" />
               接入实例
             </Button>
             <Button onClick={() => setShowCreateModal(true)}>
-              <Plus className="mr-2 h-4 w-4" />
+              <PlusIcon className="mr-2 h-4 w-4" />
               创建新实例
             </Button>
           </div>
@@ -331,14 +345,14 @@ export default function DashboardPage() {
           <Card className="p-12 text-center">
             <div className="max-w-md mx-auto">
               <div className="w-16 h-16 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Server className="h-8 w-8 text-muted-foreground" />
+                <ServerIcon className="h-8 w-8 text-muted-foreground" />
               </div>
               <h3 className="text-lg font-semibold mb-2">还没有 OpenClaw 实例</h3>
               <p className="text-muted-foreground mb-4">
                 创建您的第一个实例，开始使用 AI 助手
               </p>
               <Button onClick={() => setShowCreateModal(true)}>
-                <Plus className="mr-2 h-4 w-4" />
+                <PlusIcon className="mr-2 h-4 w-4" />
                 创建第一个实例
               </Button>
             </div>
@@ -359,13 +373,13 @@ export default function DashboardPage() {
                       </h3>
                       {t.source === 'hardware' && (
                         <Badge variant="outline" className="text-xs">
-                          <HardDrive className="h-3 w-3 mr-1" />
+                          <HardDriveIcon className="h-3 w-3 mr-1" />
                           硬件
                         </Badge>
                       )}
                       {t.source === 'custom' && (
                         <Badge variant="outline" className="text-xs">
-                          <Cloud className="h-3 w-3 mr-1" />
+                          <CloudIcon className="h-3 w-3 mr-1" />
                           自定义
                         </Badge>
                       )}
@@ -404,9 +418,9 @@ export default function DashboardPage() {
                         onClick={() => copyToClipboard(t.containerId, t.containerId)}
                       >
                         {copiedId === t.containerId ? (
-                          <Check className="h-3 w-3 text-green-500" />
+                          <CheckIcon className="h-3 w-3 text-green-500" />
                         ) : (
-                          <Copy className="h-3 w-3" />
+                          <CopyIcon className="h-3 w-3" />
                         )}
                       </Button>
                     </div>
@@ -428,7 +442,7 @@ export default function DashboardPage() {
                     className="flex-1"
                     onClick={() => window.open(t.url, '_blank')}
                   >
-                    <ExternalLink className="h-4 w-4 mr-1" />
+                    <ExternalLinkIcon className="h-4 w-4 mr-1" />
                     打开
                   </Button>
                   <Button
@@ -436,7 +450,7 @@ export default function DashboardPage() {
                     size="sm"
                     onClick={() => handleRestart(t.instanceId || t.tenantId)}
                   >
-                    <RefreshCw className="h-4 w-4" />
+                    <RefreshCwIcon className="h-4 w-4" />
                   </Button>
                   <Button
                     variant="outline"
@@ -444,7 +458,7 @@ export default function DashboardPage() {
                     onClick={() => handleDelete(t.instanceId || t.tenantId)}
                     className="text-destructive hover:text-destructive"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2Icon className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
@@ -455,7 +469,7 @@ export default function DashboardPage() {
         {/* Loading State */}
         {isLoading && (
           <div className="flex justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            <Loader2Icon className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
         )}
       </main>
@@ -523,7 +537,7 @@ export default function DashboardPage() {
                       checked={customForm.instanceType === 'cloud'}
                       onChange={() => setCustomForm({ ...customForm, instanceType: 'cloud' })}
                     />
-                    <Cloud className="h-4 w-4" />
+                    <CloudIcon className="h-4 w-4" />
                     <span>云端实例</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
@@ -533,7 +547,7 @@ export default function DashboardPage() {
                       checked={customForm.instanceType === 'hardware'}
                       onChange={() => setCustomForm({ ...customForm, instanceType: 'hardware' })}
                     />
-                    <HardDrive className="h-4 w-4" />
+                    <HardDriveIcon className="h-4 w-4" />
                     <span>硬件盒子</span>
                   </label>
                 </div>
@@ -570,7 +584,7 @@ export default function DashboardPage() {
                         onClick={() => handleSelectDevice(device)}
                       >
                         <div className="flex items-center gap-2">
-                          <HardDrive className="h-3 w-3" />
+                          <HardDriveIcon className="h-3 w-3" />
                           <span>{device.ip}</span>
                           <span className="text-muted-foreground">- {device.name}</span>
                         </div>
@@ -715,5 +729,20 @@ function StatusBadge({ status, isHealthy }: { status: string; isHealthy?: boolea
       <span className={`w-2 h-2 rounded-full ${config.color}`} />
       {config.label}
     </Badge>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-4">
+        <div className="flex flex-col items-center">
+          <Loader2Icon className="w-16 h-16 text-blue-600 animate-spin mb-4" />
+          <p className="text-lg text-muted-foreground">加载中...</p>
+        </div>
+      </div>
+    }>
+      <DashboardContent />
+    </Suspense>
   );
 }
